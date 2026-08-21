@@ -11,6 +11,7 @@ import {
 import { getDashboardData } from "./dashboardService";
 import type { FinanceMonthRow } from "../engines/financeEngine";
 import type { CostItem } from "../engines/costEngine";
+import type { AguaEnergiaOutput } from "../engines/aguaEnergiaEngine";
 
 // Identidade visual MO Global (Manual de Diretrizes) — spec seção 2.12
 const NAVY = "#14355E";
@@ -320,6 +321,21 @@ export async function generateTechnicalReportPdf(projectId: number, userId: numb
         [90, 130, 55, 55, 85, 95],
         { align: ["left", "left", "right", "left", "right", "right"] }
       );
+    }
+
+    const dimensionamento = cost.dimensionamentoAguaEnergia as AguaEnergiaOutput | null;
+    if (dimensionamento) {
+      doc.moveDown(0.3);
+      doc.fontSize(10).font("Helvetica-Bold").text("Dimensionamento Técnico — Água e Energia (módulo 2.3):");
+      doc.font("Helvetica");
+      drawKeyValueRow(doc, "População Estimada", `${number0(dimensionamento.populacaoEstimada)} hab`);
+      drawKeyValueRow(doc, "Volume de Reservação", `${number0(dimensionamento.volumeReservacaoM3)} m³`);
+      drawKeyValueRow(doc, "Vazão Máxima Horária (água)", `${dimensionamento.vazaoMaximaHorariaLs.toFixed(2)} L/s`);
+      drawKeyValueRow(doc, "Vazão Máxima de Esgoto", `${dimensionamento.vazaoMaximaEsgotoLs.toFixed(2)} L/s`);
+      drawKeyValueRow(doc, "Demanda Total de Energia", `${number0(dimensionamento.demandaTotalKva)} kVA`);
+      if (dimensionamento.custoExtensaoRedeEnergiaTotal > 0) {
+        drawKeyValueRow(doc, "Custo de Extensão de Rede (energia)", currency(dimensionamento.custoExtensaoRedeEnergiaTotal));
+      }
     }
   }
 

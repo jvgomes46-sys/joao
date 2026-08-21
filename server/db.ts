@@ -287,6 +287,7 @@ export async function upsertGeoEngineData(projectId: number, data: Omit<InsertGe
 const costEngineAccessors = createEngineDataAccessors<typeof costEngineData, any, InsertCostEngineData>(costEngineData, "cost engine", [
   "cronogramaFisico",
   "detalhamentoItens",
+  "dimensionamentoAguaEnergia",
 ]);
 export const getCostEngineDataByProjectId = costEngineAccessors.getByProjectId;
 export async function upsertCostEngineData(projectId: number, data: Omit<InsertCostEngineData, "projectId" | "id">) {

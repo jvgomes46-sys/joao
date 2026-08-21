@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcularCostEngine, calcularDimensionamentoAgua, CostEngineInput, MULTIPLICADOR_TERRAPLENAGEM, UnitCostTable } from "./costEngine";
+import { calcularCostEngine, CostEngineInput, MULTIPLICADOR_TERRAPLENAGEM, UnitCostTable } from "./costEngine";
 
 // Tabela de custos unitários "de mentira" mas não-zero para todo item usado
 // nos testes — cada item vale R$1 por unidade, assim total == quantidade,
@@ -189,20 +189,14 @@ describe("CostEngine — totalizadores", () => {
   });
 });
 
-describe("Dimensionamento de água (módulo 2.3, simplificado)", () => {
-  it("calcula população, consumo e volume de reservação a partir dos parâmetros técnicos", () => {
-    const dim = calcularDimensionamentoAgua({
-      numeroLotes: 200,
-      taxaOcupacaoHabPorLote: 3.5,
-      consumoPerCapitaLDia: 150,
-      k1: 1.2,
-      diasReservacao: 1,
-    });
+describe("Dimensionamento de Água e Energia no CostEngine (módulo 2.3)", () => {
+  it("expõe o dimensionamento de água/energia calculado pelo aguaEnergiaEngine", () => {
+    const result = calcularCostEngine({ ...baseInput, numeroLotes: 200 }, custos, paramsBase);
 
-    expect(dim.populacaoEstimada).toBe(700);
-    expect(dim.consumoMedioDiarioM3).toBeCloseTo(105, 5); // 700 * 150 / 1000
-    expect(dim.consumoMaximoDiarioM3).toBeCloseTo(126, 5); // 105 * 1.2
-    expect(dim.volumeReservacaoM3).toBeCloseTo(126, 5); // * 1 dia
+    expect(result.dimensionamentoAguaEnergia.populacaoEstimada).toBe(700); // 200 × 3.5
+    expect(result.dimensionamentoAguaEnergia.consumoMedioDiarioM3).toBeCloseTo(105, 5); // 700 * 150 / 1000
+    expect(result.dimensionamentoAguaEnergia.consumoMaximoDiarioM3).toBeCloseTo(126, 5); // 105 * 1.2
+    expect(result.dimensionamentoAguaEnergia.volumeReservacaoM3).toBeCloseTo(126, 5); // * 1 dia
   });
 
   it("o reservatório do CostEngine usa o volume dimensionado, não um valor fixo", () => {

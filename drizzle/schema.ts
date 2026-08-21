@@ -95,6 +95,7 @@ export const costEngineData = mysqlTable("cost_engine_data", {
   valorPorLote: decimal("valorPorLote", { precision: 12, scale: 2 }), // Valor por lote (R$)
   cronogramaFisico: json("cronogramaFisico"), // JSON com cronograma físico
   detalhamentoItens: json("detalhamentoItens"), // JSON com o detalhamento item a item do CostEngine (CostItem[])
+  dimensionamentoAguaEnergia: json("dimensionamentoAguaEnergia"), // JSON com o dimensionamento técnico do módulo Água e Energia (spec seção 2.3): vazões, demanda de energia etc.
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

@@ -106,6 +106,7 @@ export async function runCostEngine(
     valorPorM2: String(output.custoPorM2Gleba),
     valorPorLote: String(output.custoPorLote),
     detalhamentoItens: output.itens,
+    dimensionamentoAguaEnergia: output.dimensionamentoAguaEnergia,
   });
 
   await createConfigSnapshot({

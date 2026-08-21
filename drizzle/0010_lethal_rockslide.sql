@@ -1,0 +1,1 @@
+ALTER TABLE `cost_engine_data` ADD `dimensionamentoAguaEnergia` json;

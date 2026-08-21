@@ -8,6 +8,8 @@
  * pela camada de serviço e passados como `UnitCostTable`.
  */
 
+import { calcularAguaEnergia, type AguaEnergiaOutput } from "./aguaEnergiaEngine";
+
 export type Topografia = "plana" | "ondulada" | "acidentada";
 export type PadraoPavimentacao = "asfalto" | "paver";
 export type SolucaoEsgoto = "fossa" | "rede_publica" | "ete_propria";
@@ -48,11 +50,17 @@ export interface CostEngineInput {
   // Parâmetros técnicos de rede (módulo 2.1)
   larguraMediaViaM?: number; // padrão: 12m
 
-  // Dimensionamento de água (módulo 2.3, simplificado)
+  // Dimensionamento de Água e Energia (módulo 2.3)
   taxaOcupacaoHabPorLote?: number; // padrão: 3.5 hab/lote (mesmo do GeoEngine)
   consumoPerCapitaLDia?: number; // padrão: 150 L/hab.dia
   k1?: number; // coeficiente dia de maior consumo, padrão: 1.2
+  k2?: number; // coeficiente hora de maior consumo, padrão: 1.5
   diasReservacao?: number; // padrão: 1 dia
+  coeficienteRetornoEsgoto?: number; // C, padrão: 0.8
+  k3?: number; // coeficiente de vazão mínima de esgoto, padrão: 0.5
+  demandaReferenciaKvaPorLote?: number; // kVA/lote, padrão: 5
+  distanciaConexaoEnergiaM?: number; // distância até o ponto de conexão mais próximo (m)
+  custoExtensaoRedeRsPorM?: number; // R$/m — se omitido, custo de extensão de rede fica 0
 }
 
 export interface UnitCostTable {
@@ -92,9 +100,8 @@ export interface CostEngineOutput {
   custoPorLote: number;
   custoPorM2Gleba: number;
   capexSobreVGV: number | null;
-  // Dimensionamento de água (módulo 2.3) — exposto para auditoria/exibição
-  populacaoEstimada: number;
-  volumeReservacaoM3: number;
+  // Dimensionamento de Água e Energia (módulo 2.3) — exposto para auditoria/exibição
+  dimensionamentoAguaEnergia: AguaEnergiaOutput;
 }
 
 function extensaoViariaEixoM(sistemaViarioM2: number, larguraMediaViaM: number): number {
@@ -124,25 +131,6 @@ function item(
     ativo,
     motivo,
   };
-}
-
-/**
- * Dimensionamento simplificado de água (módulo 2.3): população, consumo
- * médio diário e volume de reservação necessário. Alimenta o item
- * "reservatório" do grupo Água, que deixa de ser valor fixo.
- */
-export function calcularDimensionamentoAgua(input: {
-  numeroLotes: number;
-  taxaOcupacaoHabPorLote: number;
-  consumoPerCapitaLDia: number;
-  k1: number;
-  diasReservacao: number;
-}) {
-  const populacaoEstimada = input.numeroLotes * input.taxaOcupacaoHabPorLote;
-  const consumoMedioDiarioM3 = (populacaoEstimada * input.consumoPerCapitaLDia) / 1000;
-  const consumoMaximoDiarioM3 = consumoMedioDiarioM3 * input.k1;
-  const volumeReservacaoM3 = consumoMaximoDiarioM3 * input.diasReservacao;
-  return { populacaoEstimada, consumoMedioDiarioM3, consumoMaximoDiarioM3, volumeReservacaoM3 };
 }
 
 export function calcularCostEngine(input: CostEngineInput, custos: UnitCostTable, params: CostEngineParams): CostEngineOutput {
@@ -268,12 +256,18 @@ export function calcularCostEngine(input: CostEngineInput, custos: UnitCostTable
   // GRUPO 4 — Abastecimento de Água
   // =========================================================================
   const aguaPorPoco = input.solucaoAgua === "poco";
-  const dimensionamentoAgua = calcularDimensionamentoAgua({
+  const dimensionamentoAguaEnergia = calcularAguaEnergia({
     numeroLotes: input.numeroLotes,
     taxaOcupacaoHabPorLote: input.taxaOcupacaoHabPorLote ?? 3.5,
     consumoPerCapitaLDia: input.consumoPerCapitaLDia ?? 150,
     k1: input.k1 ?? 1.2,
+    k2: input.k2 ?? 1.5,
     diasReservacao: input.diasReservacao ?? 1,
+    coeficienteRetornoEsgoto: input.coeficienteRetornoEsgoto ?? 0.8,
+    k3: input.k3 ?? 0.5,
+    demandaReferenciaKvaPorLote: input.demandaReferenciaKvaPorLote ?? 5,
+    distanciaConexaoEnergiaM: input.distanciaConexaoEnergiaM,
+    custoExtensaoRedeRsPorM: input.custoExtensaoRedeRsPorM,
   });
   // Regra 2 e 3 (seção 6): poço zera rede+interligação e ativa poço/casa de bombas;
   // poço + chácara também zera a ligação domiciliar (proprietário executa por conta própria)
@@ -307,11 +301,11 @@ export function calcularCostEngine(input: CostEngineInput, custos: UnitCostTable
       "reservatorio",
       "agua",
       "Reservatório (dimensionado pelo módulo Água/Energia)",
-      dimensionamentoAgua.volumeReservacaoM3,
+      dimensionamentoAguaEnergia.volumeReservacaoM3,
       "m³",
       custos,
       true,
-      `Volume calculado: população ${dimensionamentoAgua.populacaoEstimada.toFixed(0)} hab × consumo`
+      `Volume calculado: população ${dimensionamentoAguaEnergia.populacaoEstimada.toFixed(0)} hab × consumo`
     ),
     item("casa_de_bombas", "agua", "Casa de bombas", 1, "un", custos, aguaPorPoco, aguaPorPoco ? "Solução por poço" : "Solução por rede pública"),
     item(
@@ -552,7 +546,6 @@ export function calcularCostEngine(input: CostEngineInput, custos: UnitCostTable
     custoPorLote: input.numeroLotes > 0 ? capexTotal / input.numeroLotes : 0,
     custoPorM2Gleba: input.areaBruta > 0 ? capexTotal / input.areaBruta : 0,
     capexSobreVGV: params.vgvTotal && params.vgvTotal > 0 ? capexTotal / params.vgvTotal : null,
-    populacaoEstimada: dimensionamentoAgua.populacaoEstimada,
-    volumeReservacaoM3: dimensionamentoAgua.volumeReservacaoM3,
+    dimensionamentoAguaEnergia,
   };
 }
