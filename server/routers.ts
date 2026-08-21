@@ -20,6 +20,7 @@ import {
   upsertTaxEngineData,
 } from "./db";
 import { runGeoEngine } from "./services/geoEngineService";
+import { runCostEngine } from "./services/costEngineService";
 import { TRPCError } from "@trpc/server";
 
 /** Garante que o projeto existe e pertence ao usuário antes de ler/gravar dados de um motor. */
@@ -166,10 +167,12 @@ export const appRouter = router({
       }),
   }),
 
-  // CostEngine, SalesEngine, FinanceEngine e TaxEngine ainda não existem como
-  // motores de cálculo (ver Etapa 6 em diante da spec) — estas rotas apenas
-  // persistem os dados brutos coletados pelo StudyWizard nas tabelas já
-  // existentes no schema, em vez de descartá-los como acontecia antes.
+  // SalesEngine, FinanceEngine e TaxEngine ainda não existem como motores de
+  // cálculo (spec Etapa 7 em diante) — estas rotas apenas persistem os dados
+  // brutos coletados pelo StudyWizard nas tabelas já existentes no schema,
+  // em vez de descartá-los como acontecia antes. CostEngine já é um motor
+  // real (ver `calculate` abaixo); `save` continua disponível como gravação
+  // manual/override simples, sem rodar a lógica condicional completa.
   costEngine: router({
     getByProjectId: protectedProcedure
       .input(z.object({ projectId: z.number() }))
@@ -199,6 +202,45 @@ export const appRouter = router({
           esgoto: rest.esgoto !== undefined ? String(rest.esgoto) : undefined,
           energia: rest.energia !== undefined ? String(rest.energia) : undefined,
         });
+      }),
+
+    calculate: protectedProcedure
+      .input(
+        z.object({
+          projectId: z.number(),
+          topografia: z.enum(["plana", "ondulada", "acidentada"]),
+          padraoPavimentacao: z.enum(["asfalto", "paver"]),
+          solucaoEsgoto: z.enum(["fossa", "rede_publica", "ete_propria"]),
+          necessitaElevatoria: z.boolean().optional(),
+          solucaoAgua: z.enum(["poco", "rede_publica"]),
+          isChacara: z.boolean().optional(),
+          areaSupressaoVegetalM2: z.number().min(0).optional(),
+          arvoresIsoladasUn: z.number().int().min(0).optional(),
+          tipologia: z.enum(["loteamento_popular", "loteamento_aberto", "condominio_fechado", "condominio_chacaras"]),
+          participacaoEletrica: z.enum(["cliente_paga", "concessionaria_cobre"]),
+          perimetroGlebaM: z.number().positive().optional(),
+          larguraMediaViaM: z.number().positive().optional(),
+          taxaOcupacaoHabPorLote: z.number().positive().optional(),
+          consumoPerCapitaLDia: z.number().positive().optional(),
+          k1: z.number().positive().optional(),
+          diasReservacao: z.number().positive().optional(),
+          contingenciaPercentual: z.number().min(0).max(100).optional(),
+          custoFinanceiroPercentual: z.number().min(0).max(100).optional(),
+          custoAprovacoesTotal: z.number().min(0).optional(),
+          vgvTotal: z.number().min(0).optional(),
+          regiao: z.string().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { projectId, ...costInput } = input;
+        try {
+          return await runCostEngine(projectId, ctx.user.id, costInput);
+        } catch (error) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: error instanceof Error ? error.message : "Falha ao calcular CostEngine",
+          });
+        }
       }),
   }),
 

@@ -258,7 +258,11 @@ export async function getCostEngineDataByProjectId(projectId: number) {
   }
   const result = await db.select().from(costEngineData).where(eq(costEngineData.projectId, projectId)).limit(1);
   if (result.length === 0) return undefined;
-  return { ...result[0], cronogramaFisico: parseJsonColumn(result[0].cronogramaFisico) };
+  return {
+    ...result[0],
+    cronogramaFisico: parseJsonColumn(result[0].cronogramaFisico),
+    detalhamentoItens: parseJsonColumn(result[0].detalhamentoItens),
+  };
 }
 
 export async function upsertCostEngineData(projectId: number, data: Omit<InsertCostEngineData, "projectId" | "id">) {
