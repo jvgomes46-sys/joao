@@ -83,9 +83,21 @@ const LEGAL_STATUS_COLORS: Record<string, string> = {
 };
 
 function LegalComplianceCard({ projectId }: { projectId: number }) {
-  const { data, isLoading } = trpc.legalCompliance.getChecklist.useQuery({ projectId }, { enabled: Number.isFinite(projectId) });
+  const { data, isLoading, error } = trpc.legalCompliance.getChecklist.useQuery(
+    { projectId },
+    { enabled: Number.isFinite(projectId), retry: false }
+  );
 
   if (isLoading) return <Skeleton className="h-40" />;
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertTriangle className="h-4 w-4" />
+        <AlertTitle>Não foi possível carregar a Conformidade Legal</AlertTitle>
+        <AlertDescription>{error.message}</AlertDescription>
+      </Alert>
+    );
+  }
   if (!data) return null;
 
   return (
