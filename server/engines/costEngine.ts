@@ -275,7 +275,6 @@ export function calcularCostEngine(input: CostEngineInput, custos: UnitCostTable
     k1: input.k1 ?? 1.2,
     diasReservacao: input.diasReservacao ?? 1,
   });
-  const ligacaoDomiciliarAguaAtiva = !aguaPorPoco && !(aguaPorPoco && input.isChacara);
   // Regra 2 e 3 (seção 6): poço zera rede+interligação e ativa poço/casa de bombas;
   // poço + chácara também zera a ligação domiciliar (proprietário executa por conta própria)
   itens.push(
@@ -296,7 +295,7 @@ export function calcularCostEngine(input: CostEngineInput, custos: UnitCostTable
       input.numeroLotes,
       "un",
       custos,
-      !aguaPorPoco || !input.isChacara,
+      !(aguaPorPoco && input.isChacara),
       aguaPorPoco && input.isChacara
         ? "Poço + condomínio de chácaras — proprietário executa a ligação por conta própria"
         : aguaPorPoco

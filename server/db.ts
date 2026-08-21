@@ -212,153 +212,103 @@ export async function deleteProject(projectId: number, userId: number) {
   }
 }
 
-// GeoEngine data queries — um registro por projeto, sobrescrito a cada recálculo
-export async function getGeoEngineDataByProjectId(projectId: number) {
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot get geo engine data: database not available");
-    return undefined;
+/**
+ * Fábrica de queries get/upsert "um registro por projeto" — todas as tabelas
+ * de dados de engine (geo/cost/sales/finance/tax) seguem o mesmo padrão:
+ * select por projectId com parse de colunas JSON, e upsert (update se já
+ * existe, senão insert) que devolve o registro persistido.
+ */
+function createEngineDataAccessors<
+  TTable extends { projectId: any },
+  TRow extends Record<string, unknown>,
+  TInsert extends { projectId: number }
+>(
+  table: TTable,
+  label: string,
+  jsonColumns: (keyof TRow & keyof TInsert)[]
+) {
+  async function getByProjectId(projectId: number): Promise<(TRow & Record<string, unknown>) | undefined> {
+    const db = await getDb();
+    if (!db) {
+      console.warn(`[Database] Cannot get ${label} data: database not available`);
+      return undefined;
+    }
+    const result = await db.select().from(table as any).where(eq((table as any).projectId, projectId)).limit(1);
+    if (result.length === 0) return undefined;
+    const row = { ...(result[0] as TRow) };
+    for (const col of jsonColumns) {
+      (row as Record<string, unknown>)[col as string] = parseJsonColumn((row as Record<string, unknown>)[col as string] as never);
+    }
+    return row;
   }
 
-  const result = await db.select().from(geoEngineData).where(eq(geoEngineData.projectId, projectId)).limit(1);
-  if (result.length === 0) return undefined;
-  return {
-    ...result[0],
-    indicesUrbanisticos: parseJsonColumn(result[0].indicesUrbanisticos),
-    checklistGRAProhab: parseJsonColumn(result[0].checklistGRAProhab),
-  };
+  async function upsert(projectId: number, data: Omit<TInsert, "projectId" | "id">) {
+    const db = await getDb();
+    if (!db) throw new Error(`[Database] Cannot persist ${label} data: database not available`);
+
+    const existing = await getByProjectId(projectId);
+    if (existing) {
+      await db.update(table as any).set(data as any).where(eq((table as any).projectId, projectId));
+    } else {
+      await db.insert(table as any).values({ ...(data as any), projectId });
+    }
+    return getByProjectId(projectId);
+  }
+
+  return { getByProjectId, upsert };
 }
 
+// GeoEngine data queries — um registro por projeto, sobrescrito a cada recálculo
+const geoEngineAccessors = createEngineDataAccessors<typeof geoEngineData, any, InsertGeoEngineData>(geoEngineData, "geo engine", [
+  "indicesUrbanisticos",
+  "checklistGRAProhab",
+]);
+export const getGeoEngineDataByProjectId = geoEngineAccessors.getByProjectId;
 export async function upsertGeoEngineData(projectId: number, data: Omit<InsertGeoEngineData, "projectId" | "id">) {
-  const db = await getDb();
-  if (!db) {
-    throw new Error("[Database] Cannot persist GeoEngine result: database not available");
-  }
-
-  const existing = await getGeoEngineDataByProjectId(projectId);
-
-  if (existing) {
-    await db.update(geoEngineData).set(data).where(eq(geoEngineData.projectId, projectId));
-  } else {
-    await db.insert(geoEngineData).values({ ...data, projectId });
-  }
-
-  return getGeoEngineDataByProjectId(projectId);
+  return geoEngineAccessors.upsert(projectId, data);
 }
 
 // CostEngine data — um registro por projeto, sobrescrito a cada gravação
 // (dados brutos coletados pelo Wizard; o CostEngine parametrizado ainda não
 // existe — ver Etapa 6 da spec. Nenhuma gravação aqui roda em fallback
 // silencioso: se o banco não estiver disponível, a mutation falha alto.)
-export async function getCostEngineDataByProjectId(projectId: number) {
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot get cost engine data: database not available");
-    return undefined;
-  }
-  const result = await db.select().from(costEngineData).where(eq(costEngineData.projectId, projectId)).limit(1);
-  if (result.length === 0) return undefined;
-  return {
-    ...result[0],
-    cronogramaFisico: parseJsonColumn(result[0].cronogramaFisico),
-    detalhamentoItens: parseJsonColumn(result[0].detalhamentoItens),
-  };
-}
-
+const costEngineAccessors = createEngineDataAccessors<typeof costEngineData, any, InsertCostEngineData>(costEngineData, "cost engine", [
+  "cronogramaFisico",
+  "detalhamentoItens",
+]);
+export const getCostEngineDataByProjectId = costEngineAccessors.getByProjectId;
 export async function upsertCostEngineData(projectId: number, data: Omit<InsertCostEngineData, "projectId" | "id">) {
-  const db = await getDb();
-  if (!db) throw new Error("[Database] Cannot persist CostEngine data: database not available");
-
-  const existing = await getCostEngineDataByProjectId(projectId);
-  if (existing) {
-    await db.update(costEngineData).set(data).where(eq(costEngineData.projectId, projectId));
-  } else {
-    await db.insert(costEngineData).values({ ...data, projectId });
-  }
-  return getCostEngineDataByProjectId(projectId);
+  return costEngineAccessors.upsert(projectId, data);
 }
 
 // SalesEngine data
-export async function getSalesEngineDataByProjectId(projectId: number) {
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot get sales engine data: database not available");
-    return undefined;
-  }
-  const result = await db.select().from(salesEngineData).where(eq(salesEngineData.projectId, projectId)).limit(1);
-  if (result.length === 0) return undefined;
-  return {
-    ...result[0],
-    curvaVendas: parseJsonColumn(result[0].curvaVendas),
-    tabelasFinanciamento: parseJsonColumn(result[0].tabelasFinanciamento),
-  };
-}
-
+const salesEngineAccessors = createEngineDataAccessors<typeof salesEngineData, any, InsertSalesEngineData>(salesEngineData, "sales engine", [
+  "curvaVendas",
+  "tabelasFinanciamento",
+]);
+export const getSalesEngineDataByProjectId = salesEngineAccessors.getByProjectId;
 export async function upsertSalesEngineData(projectId: number, data: Omit<InsertSalesEngineData, "projectId" | "id">) {
-  const db = await getDb();
-  if (!db) throw new Error("[Database] Cannot persist SalesEngine data: database not available");
-
-  const existing = await getSalesEngineDataByProjectId(projectId);
-  if (existing) {
-    await db.update(salesEngineData).set(data).where(eq(salesEngineData.projectId, projectId));
-  } else {
-    await db.insert(salesEngineData).values({ ...data, projectId });
-  }
-  return getSalesEngineDataByProjectId(projectId);
+  return salesEngineAccessors.upsert(projectId, data);
 }
 
 // FinanceEngine data
-export async function getFinanceEngineDataByProjectId(projectId: number) {
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot get finance engine data: database not available");
-    return undefined;
-  }
-  const result = await db.select().from(financeEngineData).where(eq(financeEngineData.projectId, projectId)).limit(1);
-  if (result.length === 0) return undefined;
-  return {
-    ...result[0],
-    fluxoCaixaMensal: parseJsonColumn(result[0].fluxoCaixaMensal),
-    alertasConsistencia: parseJsonColumn(result[0].alertasConsistencia),
-  };
-}
-
+const financeEngineAccessors = createEngineDataAccessors<typeof financeEngineData, any, InsertFinanceEngineData>(
+  financeEngineData,
+  "finance engine",
+  ["fluxoCaixaMensal", "alertasConsistencia"]
+);
+export const getFinanceEngineDataByProjectId = financeEngineAccessors.getByProjectId;
 export async function upsertFinanceEngineData(projectId: number, data: Omit<InsertFinanceEngineData, "projectId" | "id">) {
-  const db = await getDb();
-  if (!db) throw new Error("[Database] Cannot persist FinanceEngine data: database not available");
-
-  const existing = await getFinanceEngineDataByProjectId(projectId);
-  if (existing) {
-    await db.update(financeEngineData).set(data).where(eq(financeEngineData.projectId, projectId));
-  } else {
-    await db.insert(financeEngineData).values({ ...data, projectId });
-  }
-  return getFinanceEngineDataByProjectId(projectId);
+  return financeEngineAccessors.upsert(projectId, data);
 }
 
 // TaxEngine data
-export async function getTaxEngineDataByProjectId(projectId: number) {
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot get tax engine data: database not available");
-    return undefined;
-  }
-  const result = await db.select().from(taxEngineData).where(eq(taxEngineData.projectId, projectId)).limit(1);
-  if (result.length === 0) return undefined;
-  return { ...result[0], impactoReforma: parseJsonColumn(result[0].impactoReforma) };
-}
-
+const taxEngineAccessors = createEngineDataAccessors<typeof taxEngineData, any, InsertTaxEngineData>(taxEngineData, "tax engine", [
+  "impactoReforma",
+]);
+export const getTaxEngineDataByProjectId = taxEngineAccessors.getByProjectId;
 export async function upsertTaxEngineData(projectId: number, data: Omit<InsertTaxEngineData, "projectId" | "id">) {
-  const db = await getDb();
-  if (!db) throw new Error("[Database] Cannot persist TaxEngine data: database not available");
-
-  const existing = await getTaxEngineDataByProjectId(projectId);
-  if (existing) {
-    await db.update(taxEngineData).set(data).where(eq(taxEngineData.projectId, projectId));
-  } else {
-    await db.insert(taxEngineData).values({ ...data, projectId });
-  }
-  return getTaxEngineDataByProjectId(projectId);
+  return taxEngineAccessors.upsert(projectId, data);
 }
 
 // TODO: add feature queries here as your schema grows.

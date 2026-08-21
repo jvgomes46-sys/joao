@@ -106,6 +106,48 @@ export async function getAllCurrentUnitCosts(regiao: string, asOf: Date = new Da
   return Array.from(latestByItem.values());
 }
 
+/**
+ * Custos unitários vigentes com fallback em camadas: começa da base
+ * "Nacional" (cobertura completa dos itens do CostEngine) e sobrepõe os
+ * valores da região pedida onde existirem — nunca o contrário.
+ *
+ * Isso existe porque uma importação regional (ex.: SINAPI para uma UF) quase
+ * sempre cobre só um subconjunto dos itens do CostEngine (a base oficial não
+ * tem código para cada item nosso, e o importador reporta o que não achou em
+ * vez de inventar). Sem esse fallback, calcular direto contra uma região com
+ * cobertura parcial zeraria silenciosamente todo item ausente — dinheiro
+ * "sumindo" do orçamento sem nenhum aviso.
+ */
+export async function getMergedUnitCosts(regiao: string, asOf: Date = new Date()) {
+  const nacional = await getAllCurrentUnitCosts("Nacional", asOf);
+  if (regiao === "Nacional") return nacional;
+
+  const regional = await getAllCurrentUnitCosts(regiao, asOf);
+  const merged = new Map(nacional.map((row) => [row.itemCodigo, row]));
+  for (const row of regional) {
+    merged.set(row.itemCodigo, row); // regional sobrepõe nacional quando existe
+  }
+  return Array.from(merged.values());
+}
+
+/** UFs brasileiras válidas — usado para detectar a região a partir do texto livre de localização do projeto. */
+const UFS_BRASIL = new Set([
+  "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR",
+  "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO",
+]);
+
+/**
+ * Extrai a sigla de UF de um texto livre de localização (ex.: "Formosa, GO",
+ * "Formosa - GO", "Formosa/GO"). Retorna null se não encontrar um padrão
+ * reconhecível — nesse caso o chamador deve cair para a região "Nacional".
+ */
+export function extrairUfDaLocalizacao(location: string | null | undefined): string | null {
+  if (!location) return null;
+  const match = location.toUpperCase().match(/(?:^|[\s,\/\-])([A-Z]{2})\s*$/);
+  const uf = match?.[1];
+  return uf && UFS_BRASIL.has(uf) ? uf : null;
+}
+
 export async function getCostParameter(chave: string, regiao = "Nacional", asOf: Date = new Date()) {
   const db = await getDb();
   if (!db) throw new Error("[Config] Banco de dados não disponível");

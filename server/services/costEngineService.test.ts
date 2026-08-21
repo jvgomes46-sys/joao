@@ -4,7 +4,7 @@ import { getDb, createProject, getCostEngineDataByProjectId } from "../db";
 import { getLatestConfigSnapshot } from "../config";
 import { runGeoEngine } from "./geoEngineService";
 import { runCostEngine } from "./costEngineService";
-import { projects, users, geoEngineData, costEngineData, configSnapshots } from "../../drizzle/schema";
+import { projects, users, geoEngineData, costEngineData, configSnapshots, configUnitCosts } from "../../drizzle/schema";
 
 describe("CostEngineService — integração com GeoEngine e Módulo de Configuração", () => {
   let userId: number;
@@ -107,5 +107,59 @@ describe("CostEngineService — integração com GeoEngine e Módulo de Configur
     const redeColetora = costOutput.itens.find((i) => i.itemCodigo === "rede_coletora_esgoto")!;
     expect(fossa.ativo).toBe(true);
     expect(redeColetora.ativo).toBe(false);
+  });
+
+  it("detecta a UF pela localização do projeto e não zera itens fora da cobertura regional", async () => {
+    // UF isolada (PR) para não colidir com outros testes que usam GO em paralelo.
+    const db = await getDb();
+    // Simula uma importação SINAPI regional parcial: só 1 item tem preço para PR
+    await db!.insert(configUnitCosts).values([
+      {
+        grupo: "terraplenagem",
+        itemCodigo: "corte_aterro",
+        itemDescricao: "teste cobertura parcial",
+        unidade: "m3",
+        valorUnitario: "777.77",
+        regiao: "PR",
+        dataBase: new Date(),
+      },
+    ]);
+
+    const projetoPr = await createProject({
+      userId,
+      name: "Loteamento Teste Cobertura Regional",
+      type: "loteamento",
+      location: "Curitiba, PR",
+    });
+
+    await runGeoEngine(projetoPr!.id, userId, {
+      areaBruta: 100_000,
+      modoLotes: "automatico",
+      areaMediaLoteAlvo: 300,
+    });
+
+    const output = await runCostEngine(projetoPr!.id, userId, {
+      topografia: "plana",
+      padraoPavimentacao: "asfalto",
+      solucaoEsgoto: "rede_publica",
+      solucaoAgua: "rede_publica",
+      tipologia: "loteamento_aberto",
+      participacaoEletrica: "concessionaria_cobre",
+      // regiao NÃO informado — precisa detectar "PR" da location
+    });
+
+    const corteAterro = output.itens.find((i) => i.itemCodigo === "corte_aterro")!;
+    expect(corteAterro.custoUnitario).toBe(777.77); // veio da região detectada, não do nacional
+
+    // Itens fora da cobertura da região de teste continuam com custo > 0
+    // (vieram do fallback nacional) — não foram zerados silenciosamente.
+    const regularizacao = output.itens.find((i) => i.itemCodigo === "regularizacao")!;
+    expect(regularizacao.custoUnitario).toBeGreaterThan(0);
+
+    await db!.delete(geoEngineData).where(eq(geoEngineData.projectId, projetoPr!.id));
+    await db!.delete(costEngineData).where(eq(costEngineData.projectId, projetoPr!.id));
+    await db!.delete(configSnapshots).where(eq(configSnapshots.projectId, projetoPr!.id));
+    await db!.delete(projects).where(eq(projects.id, projetoPr!.id));
+    await db!.delete(configUnitCosts).where(eq(configUnitCosts.regiao, "PR"));
   });
 });

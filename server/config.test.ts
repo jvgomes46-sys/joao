@@ -4,14 +4,18 @@ import { getDb } from "./db";
 import { configSnapshots } from "../drizzle/schema";
 import {
   createConfigSnapshot,
+  extrairUfDaLocalizacao,
+  getAllCurrentUnitCosts,
   getCostParameter,
   getLatestConfigSnapshot,
   getLegislationForLocation,
+  getMergedUnitCosts,
   getPrazoAprovacao,
   getPrazoObraPorPorte,
   getTaxRegime,
   getTypologyMatrixEntry,
 } from "./config";
+import { configUnitCosts } from "../drizzle/schema";
 
 describe("Módulo de Configuração", () => {
   it("cai no piso federal quando o município não está cadastrado", async () => {
@@ -74,5 +78,37 @@ describe("Módulo de Configuração", () => {
     await db!.delete(configSnapshots).where(eq(configSnapshots.projectId, fakeProjectId));
     expect((snapshot!.snapshotData as { areaMinimaLote: number }).areaMinimaLote).toBe(125);
     expect((snapshot!.overrides as { bdi: number }).bdi).toBe(22);
+  });
+
+  it("extrai a UF de textos livres de localização em vários formatos", () => {
+    expect(extrairUfDaLocalizacao("Formosa, GO")).toBe("GO");
+    expect(extrairUfDaLocalizacao("Formosa - GO")).toBe("GO");
+    expect(extrairUfDaLocalizacao("Formosa/GO")).toBe("GO");
+    expect(extrairUfDaLocalizacao("Formosa go")).toBe("GO");
+    expect(extrairUfDaLocalizacao("Cambyretá, Paraguai")).toBeNull();
+    expect(extrairUfDaLocalizacao(null)).toBeNull();
+    expect(extrairUfDaLocalizacao("")).toBeNull();
+  });
+
+  it("getMergedUnitCosts sobrepõe a região sobre o nacional sem zerar itens não cobertos pela região", async () => {
+    const db = await getDb();
+    await db!.insert(configUnitCosts).values([
+      { grupo: "terraplenagem", itemCodigo: "corte_aterro", itemDescricao: "teste", unidade: "m3", valorUnitario: "999.99", regiao: "GO-TESTE-MERGE", dataBase: new Date() },
+    ]);
+
+    const nacional = await getAllCurrentUnitCosts("Nacional");
+    const merged = await getMergedUnitCosts("GO-TESTE-MERGE");
+
+    // item coberto pela região -> usa o valor regional
+    const corteAterroMerged = merged.find((r) => r.itemCodigo === "corte_aterro");
+    expect(Number(corteAterroMerged!.valorUnitario)).toBe(999.99);
+
+    // itens NÃO cobertos pela região continuam presentes (com o valor nacional), não zerados/ausentes
+    expect(merged.length).toBe(nacional.length);
+    const outroItem = merged.find((r) => r.itemCodigo === "regularizacao");
+    expect(outroItem).toBeDefined();
+    expect(Number(outroItem!.valorUnitario)).toBeGreaterThan(0);
+
+    await db!.delete(configUnitCosts).where(eq(configUnitCosts.regiao, "GO-TESTE-MERGE"));
   });
 });

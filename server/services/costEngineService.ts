@@ -1,4 +1,4 @@
-import { getAllCurrentUnitCosts, getCostParameter, createConfigSnapshot } from "../config";
+import { getMergedUnitCosts, getCostParameter, createConfigSnapshot, extrairUfDaLocalizacao } from "../config";
 import { getGeoEngineDataByProjectId, getProjectById, upsertCostEngineData } from "../db";
 import { calcularCostEngine, CostEngineInput, CostEngineOutput, UnitCostTable } from "../engines/costEngine";
 
@@ -11,7 +11,7 @@ export type CostEngineTechnicalInput = Omit<
   custoFinanceiroPercentual?: number;
   custoAprovacoesTotal?: number;
   vgvTotal?: number;
-  regiao?: string; // padrão: "Nacional" — deve casar com a região dos custos unitários cadastrados na Configuração
+  regiao?: string; // padrão: UF detectada da localização do projeto, senão "Nacional"
 };
 
 /**
@@ -46,10 +46,10 @@ export async function runCostEngine(
     throw new Error("Resultado do GeoEngine incompleto para este projeto — recalcule o GeoEngine");
   }
 
-  const regiao = input.regiao ?? "Nacional";
+  const regiao = input.regiao ?? extrairUfDaLocalizacao(project.location) ?? "Nacional";
   const { regiao: _regiao, contingenciaPercentual, custoFinanceiroPercentual, custoAprovacoesTotal, vgvTotal, ...technicalInput } = input;
 
-  const unitCostRows = await getAllCurrentUnitCosts(regiao);
+  const unitCostRows = await getMergedUnitCosts(regiao);
   if (unitCostRows.length === 0) {
     throw new Error(`Nenhum custo unitário cadastrado na Configuração para a região "${regiao}" — rode o seed ou cadastre os custos`);
   }
