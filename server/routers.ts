@@ -27,6 +27,7 @@ import { runFinanceEngine } from "./services/financeEngineService";
 import { runSalesEngine } from "./services/salesEngineService";
 import { runTaxEngine } from "./services/taxEngineService";
 import { runScenarioEngine } from "./services/scenarioEngineService";
+import { getDashboardData } from "./services/dashboardService";
 import { TRPCError } from "@trpc/server";
 
 /** Garante que o projeto existe e pertence ao usuário antes de ler/gravar dados de um motor. */
@@ -457,6 +458,21 @@ export const appRouter = router({
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: error instanceof Error ? error.message : "Falha ao calcular Cenários",
+          });
+        }
+      }),
+  }),
+
+  dashboard: router({
+    getByProjectId: protectedProcedure
+      .input(z.object({ projectId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        try {
+          return await getDashboardData(input.projectId, ctx.user.id);
+        } catch (error) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: error instanceof Error ? error.message : "Falha ao montar o Dashboard",
           });
         }
       }),

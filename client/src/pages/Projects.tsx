@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Search, Building2, MapPin, Calendar, Trash2, Edit2, Eye } from "lucide-react";
 import { useIsMobile } from "@/hooks/useMobile";
+import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { StudyWizard } from "@/components/StudyWizard";
@@ -163,14 +164,16 @@ export default function Projects() {
 
                 {/* Actions */}
                 <div className={`flex gap-2 pt-2 ${isMobile ? "flex-col" : ""}`}>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={`gap-1 ${isMobile ? "w-full" : "flex-1"}`}
-                  >
-                    <Eye className="w-4 h-4" />
-                    {isMobile ? "Abrir" : "Abrir"}
-                  </Button>
+                  <Link href={`/projetos/${project.id}`} className={isMobile ? "w-full" : "flex-1"}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={`gap-1 w-full`}
+                    >
+                      <Eye className="w-4 h-4" />
+                      Abrir
+                    </Button>
+                  </Link>
                   <Button
                     variant="outline"
                     size="sm"

@@ -7,6 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import DashboardLayout from "./components/DashboardLayout";
 import Home from "./pages/Home";
 import Projects from "./pages/Projects";
+import Dashboard from "./pages/Dashboard";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -16,6 +17,11 @@ function Router() {
       <Route path="/projetos">
         <DashboardLayout>
           <Projects />
+        </DashboardLayout>
+      </Route>
+      <Route path="/projetos/:id">
+        <DashboardLayout>
+          <Dashboard />
         </DashboardLayout>
       </Route>
       <Route path="/404" component={NotFound} />
