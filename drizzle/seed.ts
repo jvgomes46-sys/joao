@@ -63,13 +63,15 @@ async function main() {
   });
 
   // --- D. Matriz de Tipologia ---
-  // TODO(confirmar): precoBaseM2 e velocidadeAbsorcaoPadrao são placeholders —
-  // substituir pelos valores reais da aba "Tabelas" da planilha mestre.
+  // Valores reais extraídos de Tabelas!A72:E76 da Planilha Mestre de
+  // Viabilidade (aba "J. MATRIZ DE TIPOLOGIA — base do PROCV"), não mais
+  // placeholder. velocidadeAbsorcaoPadrao é fração de lotes/mês (ex.: 0.015
+  // = 1,5% do total de lotes vendidos por mês), igual à planilha original.
   const typologyRows: (typeof configTypologyMatrix.$inferInsert)[] = [
-    { tipologia: "loteamento_popular", precoBaseM2: "180.00", velocidadeAbsorcaoPadrao: "8.00", temMuro: false, temPortaria: false, temAreaLazer: false, regiao: "Nacional", dataBase: now },
-    { tipologia: "loteamento_aberto", precoBaseM2: "280.00", velocidadeAbsorcaoPadrao: "5.00", temMuro: false, temPortaria: false, temAreaLazer: false, regiao: "Nacional", dataBase: now },
-    { tipologia: "condominio_fechado", precoBaseM2: "420.00", velocidadeAbsorcaoPadrao: "4.00", temMuro: true, temPortaria: true, temAreaLazer: true, regiao: "Nacional", dataBase: now },
-    { tipologia: "condominio_chacaras", precoBaseM2: "150.00", velocidadeAbsorcaoPadrao: "2.50", temMuro: true, temPortaria: true, temAreaLazer: false, regiao: "Nacional", dataBase: now },
+    { tipologia: "loteamento_popular", precoBaseM2: "380.00", velocidadeAbsorcaoPadrao: "0.0200", temMuro: false, temPortaria: false, temAreaLazer: false, regiao: "Nacional", dataBase: now },
+    { tipologia: "loteamento_aberto", precoBaseM2: "450.00", velocidadeAbsorcaoPadrao: "0.0150", temMuro: false, temPortaria: false, temAreaLazer: false, regiao: "Nacional", dataBase: now },
+    { tipologia: "condominio_fechado", precoBaseM2: "780.00", velocidadeAbsorcaoPadrao: "0.0080", temMuro: true, temPortaria: true, temAreaLazer: true, regiao: "Nacional", dataBase: now },
+    { tipologia: "condominio_chacaras", precoBaseM2: "650.00", velocidadeAbsorcaoPadrao: "0.0060", temMuro: true, temPortaria: true, temAreaLazer: true, regiao: "Nacional", dataBase: now },
   ];
   await db.insert(configTypologyMatrix).values(typologyRows);
 

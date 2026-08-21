@@ -1,0 +1,1 @@
+ALTER TABLE `config_typology_matrix` MODIFY COLUMN `velocidadeAbsorcaoPadrao` decimal(8,4);

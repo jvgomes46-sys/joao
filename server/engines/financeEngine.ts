@@ -106,10 +106,23 @@ function pesoVenda(mes: number, inicioVendas: number, prazoVendas: number, curva
 }
 
 /**
- * Custo bruto de obra no mês, ANTES do portão externo de duração da obra.
- * Réplica da coluna U da planilha (curva por disciplina) ou do valor linear.
+ * Custo de obra lançado no mês.
+ *
+ * Modo "linear": um portão simples [inicioObra, inicioObra+duracaoObra)
+ * divide o valor igualmente pelos meses da obra — correto por construção.
+ *
+ * Modo "curva_s": cada disciplina já tem sua própria janela [mesInicio,
+ * mesFim] calculada a partir de duracaoObra (seção "Curva física de obra").
+ * NÃO aplicamos um portão externo adicional aqui: a Planilha Mestre de
+ * Viabilidade original faz isso (coluna H, gate estrito "< inicioObra +
+ * duracaoObra"), e isso zera silenciosamente o último mês de qualquer
+ * disciplina cuja janela termine exatamente no fim do prazo de obra (ex.:
+ * Sinalização, que vai até 100%) — dinheiro do orçamento nunca chega a ser
+ * desembolsado no fluxo de caixa. Confirmamos isso comparando os valores
+ * mês a mês contra a planilha original. Aqui corrigimos: cada disciplina é
+ * paga integralmente dentro da sua própria janela, sem um corte externo.
  */
-function custoObraBrutoNoMes(
+function custoObraNoMes(
   mes: number,
   inicioObra: number,
   duracaoObra: number,
@@ -118,8 +131,9 @@ function custoObraBrutoNoMes(
   gruposCustoObra: Partial<Record<string, number>>
 ): number {
   if (curva === "linear") {
-    return custoObraMensalLinear;
+    return mes >= inicioObra && mes < inicioObra + duracaoObra ? custoObraMensalLinear : 0;
   }
+
   let total = 0;
   for (const [grupo, valorTotal] of Object.entries(gruposCustoObra)) {
     if (!valorTotal) continue;
@@ -133,25 +147,6 @@ function custoObraBrutoNoMes(
     }
   }
   return total;
-}
-
-/**
- * Custo de obra efetivamente lançado no mês: aplica o "portão" externo de
- * duração da obra [inicioObra, inicioObra+duracaoObra) por cima do valor
- * bruto — réplica exata da planilha (coluna H), que zera o mês mesmo que a
- * janela de uma disciplina (ex.: Sinalização, que vai até 100% do prazo)
- * encoste exatamente no mês de borda.
- */
-function custoObraNoMes(
-  mes: number,
-  inicioObra: number,
-  duracaoObra: number,
-  curva: CurvaObra,
-  custoObraMensalLinear: number,
-  gruposCustoObra: Partial<Record<string, number>>
-): number {
-  if (mes < inicioObra || mes >= inicioObra + duracaoObra) return 0;
-  return custoObraBrutoNoMes(mes, inicioObra, duracaoObra, curva, custoObraMensalLinear, gruposCustoObra);
 }
 
 /** NPV no formato Excel: primeiro fluxo descontado por (1+taxa)^1. */

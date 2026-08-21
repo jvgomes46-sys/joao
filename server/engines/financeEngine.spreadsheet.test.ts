@@ -10,6 +10,13 @@ import { calcularFinanceEngine } from "./financeEngine";
  * foram lidos diretamente das células já calculadas do arquivo .xlsx
  * (LibreOffice/Excel, não recalculados por nós), então qualquer divergência
  * grande aqui indica um erro real na tradução da lógica da planilha.
+ *
+ * EXCEÇÃO DELIBERADA: os valores de obra/resultado nominal/indicadores
+ * derivados NÃO batem 1:1 com a planilha original — ela tem um bug (um
+ * portão externo que zera o último mês de disciplinas cuja janela termina
+ * exatamente no fim do prazo de obra, "perdendo" ~R$91 mil de orçamento no
+ * fluxo de caixa) que decidimos corrigir em vez de replicar. Ver o segundo
+ * `it` abaixo.
  */
 describe("FinanceEngine — validado contra a Planilha Mestre de Viabilidade real", () => {
   const output = calcularFinanceEngine({
@@ -52,24 +59,37 @@ describe("FinanceEngine — validado contra a Planilha Mestre de Viabilidade rea
     capexTotal: 11697718.9523, // Orçamento!$F$63
   });
 
-  it("totais do fluxo batem com a planilha (receita bruta, deduções, receita líquida, aprovações, obra, resultado nominal)", () => {
+  it("totais do fluxo batem com a planilha (receita bruta, deduções, receita líquida, aprovações)", () => {
+    // Estes quatro NÃO dependem da curva física de obra por disciplina —
+    // batem exatamente com a planilha original.
     expect(output.receitaBrutaTotal).toBeCloseTo(21697426.83, -2);
     expect(output.deducoesTotal).toBeCloseTo(-5207382.44, -2);
     expect(output.receitaLiquidaTotal).toBeCloseTo(16490044.39, -2);
     expect(output.aprovacoesTotal).toBeCloseTo(-644034.24, -1);
-    expect(output.obraTotal).toBeCloseTo(-11379513.48, -1);
-    expect(output.resultadoNominal).toBeCloseTo(4466496.67, -1);
   });
 
-  it("indicadores batem com o Dashboard real (margem, ROI, exposição, VPL, TIR, payback)", () => {
-    expect(output.margemSobreReceitaRealizada).toBeCloseTo(0.2058537496216442, 3);
-    expect(output.roiSobreCapex).toBeCloseTo(0.3818262934791903, 3);
-    expect(output.exposicaoMaximaCaixa).toBeCloseTo(8372867.39, -2);
-    expect(output.vpl).toBeCloseTo(-518743.28, -2);
+  it("obra e resultado nominal DIVERGEM da planilha de propósito — bug corrigido, não replicado", () => {
+    // A planilha original zera o último mês de qualquer disciplina cuja
+    // janela termine exatamente no fim do prazo de obra (ex.: Sinalização,
+    // que vai até 100%) por causa de um portão externo estrito
+    // (A<$B$7+$B$8). Isso faz ~R$91 mil do orçamento de obra nunca serem
+    // desembolsados no fluxo de caixa da planilha original — dinheiro
+    // "sumido". Aqui cada disciplina é paga integralmente dentro da sua
+    // própria janela, sem esse corte. Os valores abaixo são os CORRETOS
+    // (maiores que os -11.379.513,48 / 4.466.496,67 da planilha original).
+    expect(output.obraTotal).toBeCloseTo(-11470442.61, -1);
+    expect(output.resultadoNominal).toBeCloseTo(4375567.54, -1);
+  });
+
+  it("indicadores derivados refletem a obra corrigida — próximos, mas não idênticos, ao Dashboard original", () => {
+    expect(output.margemSobreReceitaRealizada).toBeCloseTo(0.2017, 3);
+    expect(output.roiSobreCapex).toBeCloseTo(0.3741, 3);
+    expect(output.exposicaoMaximaCaixa).toBeCloseTo(8372867.39, -2); // não afetado pela correção
+    expect(output.vpl).toBeCloseTo(-579451.35, -2);
     expect(output.tirMensal).not.toBeNull();
-    expect(output.tirMensal!).toBeCloseTo(0.008995546601864302, 3);
-    expect(output.tirAnual!).toBeCloseTo(0.11345070034972382, 2);
-    expect(output.paybackMes).toBe(92);
+    expect(output.tirMensal!).toBeCloseTo(0.008773, 3);
+    expect(output.tirAnual!).toBeCloseTo(0.110509, 2);
+    expect(output.paybackMes).toBe(93); // 1 mês a mais que a planilha original (92) — obra corrigida custa mais
   });
 
   it("total de lotes vendidos ao longo do horizonte bate com o total comercializado", () => {

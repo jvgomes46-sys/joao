@@ -310,7 +310,7 @@ export const configTypologyMatrix = mysqlTable("config_typology_matrix", {
     "condominio_chacaras",
   ]).notNull(),
   precoBaseM2: decimal("precoBaseM2", { precision: 12, scale: 2 }).notNull(),
-  velocidadeAbsorcaoPadrao: decimal("velocidadeAbsorcaoPadrao", { precision: 8, scale: 2 }), // lotes/mês
+  velocidadeAbsorcaoPadrao: decimal("velocidadeAbsorcaoPadrao", { precision: 8, scale: 4 }), // fração de lotes vendidos por mês (0-1) — ex.: 0.015 = 1,5% dos lotes/mês
   temMuro: boolean("temMuro").default(false).notNull(),
   temPortaria: boolean("temPortaria").default(false).notNull(),
   temAreaLazer: boolean("temAreaLazer").default(false).notNull(),

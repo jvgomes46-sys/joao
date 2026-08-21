@@ -22,6 +22,7 @@ import {
 import { runGeoEngine } from "./services/geoEngineService";
 import { runCostEngine } from "./services/costEngineService";
 import { runFinanceEngine } from "./services/financeEngineService";
+import { runSalesEngine } from "./services/salesEngineService";
 import { TRPCError } from "@trpc/server";
 
 /** Garante que o projeto existe e pertence ao usuário antes de ler/gravar dados de um motor. */
@@ -270,6 +271,36 @@ export const appRouter = router({
           precoMedioM2: rest.precoMedioM2 !== undefined ? String(rest.precoMedioM2) : undefined,
           curvaVendas: velocidadeVendas !== undefined ? { velocidadeMensalLotes: velocidadeVendas } : undefined,
         });
+      }),
+
+    calculate: protectedProcedure
+      .input(
+        z.object({
+          projectId: z.number(),
+          tipologia: z.enum(["loteamento_popular", "loteamento_aberto", "condominio_fechado", "condominio_chacaras"]),
+          modoPreco: z.enum(["automatico", "manual"]),
+          agioPercentual: z.number().min(-1).max(5).optional(),
+          precoManualM2: z.number().positive().optional(),
+          modoAbsorcao: z.enum(["automatico", "manual"]),
+          absorcaoManualLotesMes: z.number().int().positive().optional(),
+          comissaoPercentual: z.number().min(0).max(1),
+          marketingPercentual: z.number().min(0).max(1),
+          impostosPercentual: z.number().min(0).max(1),
+          inadimplenciaPercentual: z.number().min(0).max(1),
+          despesasAdministrativasPercentual: z.number().min(0).max(1),
+          regiao: z.string().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { projectId, ...salesInput } = input;
+        try {
+          return await runSalesEngine(projectId, ctx.user.id, salesInput);
+        } catch (error) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: error instanceof Error ? error.message : "Falha ao calcular SalesEngine",
+          });
+        }
       }),
   }),
 

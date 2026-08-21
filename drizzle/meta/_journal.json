@@ -36,6 +36,13 @@
       "when": 1787318417530,
       "tag": "0004_soft_hawkeye",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1787329805600,
+      "tag": "0005_soft_mantis",
+      "breakpoints": true
     }
   ]
 }
