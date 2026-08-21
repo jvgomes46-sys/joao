@@ -1,9 +1,36 @@
 import { eq, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, projects, InsertProject, geoEngineData, InsertGeoEngineData } from "../drizzle/schema";
+import {
+  InsertUser,
+  users,
+  projects,
+  InsertProject,
+  geoEngineData,
+  InsertGeoEngineData,
+  costEngineData,
+  InsertCostEngineData,
+  salesEngineData,
+  InsertSalesEngineData,
+  financeEngineData,
+  InsertFinanceEngineData,
+  taxEngineData,
+  InsertTaxEngineData,
+} from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
+
+/**
+ * MariaDB (usada em dev/CI) reporta colunas JSON como BLOB em vez do tipo
+ * JSON real do MySQL 8 — o mysql2 só auto-parseia quando o driver reporta
+ * tipo JSON, então em MariaDB o valor chega como string crua. Em produção
+ * (MySQL real) o valor já vem parseado e esta função é um passthrough.
+ */
+export function parseJsonColumn<T>(value: T | string | null | undefined): T | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") return value;
+  return JSON.parse(value) as T;
+}
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
@@ -194,7 +221,12 @@ export async function getGeoEngineDataByProjectId(projectId: number) {
   }
 
   const result = await db.select().from(geoEngineData).where(eq(geoEngineData.projectId, projectId)).limit(1);
-  return result.length > 0 ? result[0] : undefined;
+  if (result.length === 0) return undefined;
+  return {
+    ...result[0],
+    indicesUrbanisticos: parseJsonColumn(result[0].indicesUrbanisticos),
+    checklistGRAProhab: parseJsonColumn(result[0].checklistGRAProhab),
+  };
 }
 
 export async function upsertGeoEngineData(projectId: number, data: Omit<InsertGeoEngineData, "projectId" | "id">) {
@@ -212,6 +244,113 @@ export async function upsertGeoEngineData(projectId: number, data: Omit<InsertGe
   }
 
   return getGeoEngineDataByProjectId(projectId);
+}
+
+// CostEngine data — um registro por projeto, sobrescrito a cada gravação
+// (dados brutos coletados pelo Wizard; o CostEngine parametrizado ainda não
+// existe — ver Etapa 6 da spec. Nenhuma gravação aqui roda em fallback
+// silencioso: se o banco não estiver disponível, a mutation falha alto.)
+export async function getCostEngineDataByProjectId(projectId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get cost engine data: database not available");
+    return undefined;
+  }
+  const result = await db.select().from(costEngineData).where(eq(costEngineData.projectId, projectId)).limit(1);
+  if (result.length === 0) return undefined;
+  return { ...result[0], cronogramaFisico: parseJsonColumn(result[0].cronogramaFisico) };
+}
+
+export async function upsertCostEngineData(projectId: number, data: Omit<InsertCostEngineData, "projectId" | "id">) {
+  const db = await getDb();
+  if (!db) throw new Error("[Database] Cannot persist CostEngine data: database not available");
+
+  const existing = await getCostEngineDataByProjectId(projectId);
+  if (existing) {
+    await db.update(costEngineData).set(data).where(eq(costEngineData.projectId, projectId));
+  } else {
+    await db.insert(costEngineData).values({ ...data, projectId });
+  }
+  return getCostEngineDataByProjectId(projectId);
+}
+
+// SalesEngine data
+export async function getSalesEngineDataByProjectId(projectId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get sales engine data: database not available");
+    return undefined;
+  }
+  const result = await db.select().from(salesEngineData).where(eq(salesEngineData.projectId, projectId)).limit(1);
+  if (result.length === 0) return undefined;
+  return {
+    ...result[0],
+    curvaVendas: parseJsonColumn(result[0].curvaVendas),
+    tabelasFinanciamento: parseJsonColumn(result[0].tabelasFinanciamento),
+  };
+}
+
+export async function upsertSalesEngineData(projectId: number, data: Omit<InsertSalesEngineData, "projectId" | "id">) {
+  const db = await getDb();
+  if (!db) throw new Error("[Database] Cannot persist SalesEngine data: database not available");
+
+  const existing = await getSalesEngineDataByProjectId(projectId);
+  if (existing) {
+    await db.update(salesEngineData).set(data).where(eq(salesEngineData.projectId, projectId));
+  } else {
+    await db.insert(salesEngineData).values({ ...data, projectId });
+  }
+  return getSalesEngineDataByProjectId(projectId);
+}
+
+// FinanceEngine data
+export async function getFinanceEngineDataByProjectId(projectId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get finance engine data: database not available");
+    return undefined;
+  }
+  const result = await db.select().from(financeEngineData).where(eq(financeEngineData.projectId, projectId)).limit(1);
+  if (result.length === 0) return undefined;
+  return { ...result[0], fluxoCaixaMensal: parseJsonColumn(result[0].fluxoCaixaMensal) };
+}
+
+export async function upsertFinanceEngineData(projectId: number, data: Omit<InsertFinanceEngineData, "projectId" | "id">) {
+  const db = await getDb();
+  if (!db) throw new Error("[Database] Cannot persist FinanceEngine data: database not available");
+
+  const existing = await getFinanceEngineDataByProjectId(projectId);
+  if (existing) {
+    await db.update(financeEngineData).set(data).where(eq(financeEngineData.projectId, projectId));
+  } else {
+    await db.insert(financeEngineData).values({ ...data, projectId });
+  }
+  return getFinanceEngineDataByProjectId(projectId);
+}
+
+// TaxEngine data
+export async function getTaxEngineDataByProjectId(projectId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get tax engine data: database not available");
+    return undefined;
+  }
+  const result = await db.select().from(taxEngineData).where(eq(taxEngineData.projectId, projectId)).limit(1);
+  if (result.length === 0) return undefined;
+  return { ...result[0], impactoReforma: parseJsonColumn(result[0].impactoReforma) };
+}
+
+export async function upsertTaxEngineData(projectId: number, data: Omit<InsertTaxEngineData, "projectId" | "id">) {
+  const db = await getDb();
+  if (!db) throw new Error("[Database] Cannot persist TaxEngine data: database not available");
+
+  const existing = await getTaxEngineDataByProjectId(projectId);
+  if (existing) {
+    await db.update(taxEngineData).set(data).where(eq(taxEngineData.projectId, projectId));
+  } else {
+    await db.insert(taxEngineData).values({ ...data, projectId });
+  }
+  return getTaxEngineDataByProjectId(projectId);
 }
 
 // TODO: add feature queries here as your schema grows.

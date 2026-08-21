@@ -10,19 +10,7 @@ import {
   configUnitCosts,
   InsertConfigSnapshot,
 } from "../drizzle/schema";
-import { getDb } from "./db";
-
-/**
- * O driver mysql2 usado por esta instância do Drizzle retorna colunas JSON
- * como string crua em vez de objeto já desserializado. Esta função normaliza
- * os dois casos para nunca vazar uma string JSON não parseada para quem
- * consome estas funções (motores de cálculo, snapshots).
- */
-function parseJsonColumn<T>(value: T | string | null): T | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value !== "string") return value;
-  return JSON.parse(value) as T;
-}
+import { getDb, parseJsonColumn } from "./db";
 
 /**
  * Módulo de Configuração — camada de leitura para os motores de cálculo.

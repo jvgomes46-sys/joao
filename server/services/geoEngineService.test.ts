@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getDb, createProject, getGeoEngineDataByProjectId } from "../db";
 import { getLatestConfigSnapshot } from "../config";
 import { runGeoEngine } from "./geoEngineService";
-import { projects, users } from "../../drizzle/schema";
+import { projects, users, geoEngineData, configSnapshots } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 
 describe("GeoEngineService — integração com banco real e Módulo de Configuração", () => {
@@ -29,6 +29,8 @@ describe("GeoEngineService — integração com banco real e Módulo de Configur
   afterAll(async () => {
     const db = await getDb();
     if (!db) return;
+    await db.delete(geoEngineData).where(eq(geoEngineData.projectId, projectId));
+    await db.delete(configSnapshots).where(eq(configSnapshots.projectId, projectId));
     await db.delete(projects).where(eq(projects.id, projectId));
     await db.delete(users).where(eq(users.id, userId));
   });

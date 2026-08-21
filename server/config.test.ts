@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
+import { getDb } from "./db";
+import { configSnapshots } from "../drizzle/schema";
 import {
   createConfigSnapshot,
   getCostParameter,
@@ -67,6 +70,8 @@ describe("Módulo de Configuração", () => {
 
     const snapshot = await getLatestConfigSnapshot(fakeProjectId, "geo_engine");
     expect(snapshot).toBeDefined();
+    const db = await getDb();
+    await db!.delete(configSnapshots).where(eq(configSnapshots.projectId, fakeProjectId));
     expect((snapshot!.snapshotData as { areaMinimaLote: number }).areaMinimaLote).toBe(125);
     expect((snapshot!.overrides as { bdi: number }).bdi).toBe(22);
   });

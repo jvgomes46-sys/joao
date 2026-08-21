@@ -22,9 +22,13 @@ interface WizardData {
   type: "loteamento" | "condominio" | "incorporacao" | "";
   location: string;
   areaBruta: string;
-  areaVerde: string;
-  areaInstitucional: string;
-  sistemaViario: string;
+  areaAPP: string;
+  percentualVerde: string;
+  percentualInstitucional: string;
+  percentualSistemaViario: string;
+  modoLotes: "automatico" | "manual";
+  areaMediaLoteAlvo: string;
+  numeroLotesManual: string;
   terraplanagem: string;
   pavimentacao: string;
   agua: string;
@@ -37,6 +41,32 @@ interface WizardData {
   capitalDisponivel: string;
   regimeTributario: "ret" | "lucro_presumido" | "lucro_real" | "";
 }
+
+const WIZARD_DATA_DEFAULTS: WizardData = {
+  name: "",
+  description: "",
+  type: "",
+  location: "",
+  areaBruta: "",
+  areaAPP: "",
+  percentualVerde: "15",
+  percentualInstitucional: "5",
+  percentualSistemaViario: "20",
+  modoLotes: "automatico",
+  areaMediaLoteAlvo: "",
+  numeroLotesManual: "",
+  terraplanagem: "",
+  pavimentacao: "",
+  agua: "",
+  esgoto: "",
+  energia: "",
+  vgv: "",
+  precoMedioM2: "",
+  velocidadeVendas: "",
+  tmaUtilizada: "",
+  capitalDisponivel: "",
+  regimeTributario: "",
+};
 
 const STEPS: { id: Step; label: string; title: string; description: string; icon: React.ReactNode }[] = [
   {
@@ -99,60 +129,15 @@ interface StudyWizardProps {
 export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps) {
   const isMobile = useIsMobile();
   const [currentStep, setCurrentStep] = useState<Step>("info");
-  const [data, setData] = useState<WizardData>({
-    name: "",
-    description: "",
-    type: "",
-    location: "",
-    areaBruta: "",
-    areaVerde: "",
-    areaInstitucional: "",
-    sistemaViario: "",
-    terraplanagem: "",
-    pavimentacao: "",
-    agua: "",
-    esgoto: "",
-    energia: "",
-    vgv: "",
-    precoMedioM2: "",
-    velocidadeVendas: "",
-    tmaUtilizada: "",
-    capitalDisponivel: "",
-    regimeTributario: "",
-  });
+  const [data, setData] = useState<WizardData>(WIZARD_DATA_DEFAULTS);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const createProjectMutation = trpc.projects.create.useMutation({
-    onSuccess: () => {
-      toast.success("Estudo de viabilidade criado com sucesso!");
-      onOpenChange(false);
-      onSuccess?.();
-      setData({
-        name: "",
-        description: "",
-        type: "",
-        location: "",
-        areaBruta: "",
-        areaVerde: "",
-        areaInstitucional: "",
-        sistemaViario: "",
-        terraplanagem: "",
-        pavimentacao: "",
-        agua: "",
-        esgoto: "",
-        energia: "",
-        vgv: "",
-        precoMedioM2: "",
-        velocidadeVendas: "",
-        tmaUtilizada: "",
-        capitalDisponivel: "",
-        regimeTributario: "",
-      });
-      setCurrentStep("info");
-    },
-    onError: (error) => {
-      toast.error(`Erro ao criar estudo: ${error.message}`);
-    },
-  });
+  const createProjectMutation = trpc.projects.create.useMutation();
+  const calculateGeoEngineMutation = trpc.geoEngine.calculate.useMutation();
+  const saveCostEngineMutation = trpc.costEngine.save.useMutation();
+  const saveSalesEngineMutation = trpc.salesEngine.save.useMutation();
+  const saveFinanceEngineMutation = trpc.financeEngine.save.useMutation();
+  const saveTaxEngineMutation = trpc.taxEngine.save.useMutation();
 
   const currentStepIndex = STEPS.findIndex((s) => s.id === currentStep);
   const progress = ((currentStepIndex + 1) / STEPS.length) * 100;
@@ -170,8 +155,16 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
         }
         return true;
       case "geo":
-        if (!data.areaBruta) {
+        if (!data.areaBruta || Number(data.areaBruta) <= 0) {
           toast.error("Preencha a área bruta");
+          return false;
+        }
+        if (data.modoLotes === "automatico" && (!data.areaMediaLoteAlvo || Number(data.areaMediaLoteAlvo) <= 0)) {
+          toast.error("Preencha a área média do lote-alvo (modo automático)");
+          return false;
+        }
+        if (data.modoLotes === "manual" && (!data.numeroLotesManual || Number(data.numeroLotesManual) <= 0)) {
+          toast.error("Preencha o número de lotes (modo manual)");
           return false;
         }
         return true;
@@ -222,12 +215,82 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
       return;
     }
 
-    createProjectMutation.mutate({
-      name: data.name,
-      description: data.description,
-      type: data.type,
-      location: data.location,
-    });
+    setIsSaving(true);
+    try {
+      const project = await createProjectMutation.mutateAsync({
+        name: data.name,
+        description: data.description,
+        type: data.type,
+        location: data.location,
+      });
+
+      if (!project) {
+        throw new Error("Falha ao criar o projeto");
+      }
+
+      // GeoEngine: só roda o cálculo se a etapa Urbanístico foi preenchida.
+      if (data.areaBruta) {
+        await calculateGeoEngineMutation.mutateAsync({
+          projectId: project.id,
+          areaBruta: Number(data.areaBruta),
+          areaAPP: data.areaAPP ? Number(data.areaAPP) : undefined,
+          percentualVerde: data.percentualVerde ? Number(data.percentualVerde) : undefined,
+          percentualInstitucional: data.percentualInstitucional ? Number(data.percentualInstitucional) : undefined,
+          percentualSistemaViario: data.percentualSistemaViario ? Number(data.percentualSistemaViario) : undefined,
+          modoLotes: data.modoLotes,
+          areaMediaLoteAlvo: data.modoLotes === "automatico" && data.areaMediaLoteAlvo ? Number(data.areaMediaLoteAlvo) : undefined,
+          numeroLotesManual: data.modoLotes === "manual" && data.numeroLotesManual ? Number(data.numeroLotesManual) : undefined,
+        });
+      }
+
+      // Etapas seguintes: CostEngine/SalesEngine/FinanceEngine/TaxEngine ainda
+      // não existem como motores de cálculo — persistimos os dados brutos
+      // coletados, em vez de descartá-los (eram descartados antes desta etapa).
+      if (data.terraplanagem || data.pavimentacao || data.agua || data.esgoto || data.energia) {
+        await saveCostEngineMutation.mutateAsync({
+          projectId: project.id,
+          terraplanagem: data.terraplanagem ? Number(data.terraplanagem) : undefined,
+          pavimentacao: data.pavimentacao ? Number(data.pavimentacao) : undefined,
+          agua: data.agua ? Number(data.agua) : undefined,
+          esgoto: data.esgoto ? Number(data.esgoto) : undefined,
+          energia: data.energia ? Number(data.energia) : undefined,
+        });
+      }
+
+      if (data.vgv || data.precoMedioM2 || data.velocidadeVendas) {
+        await saveSalesEngineMutation.mutateAsync({
+          projectId: project.id,
+          vgv: data.vgv ? Number(data.vgv) : undefined,
+          precoMedioM2: data.precoMedioM2 ? Number(data.precoMedioM2) : undefined,
+          velocidadeVendas: data.velocidadeVendas ? Number(data.velocidadeVendas) : undefined,
+        });
+      }
+
+      if (data.tmaUtilizada || data.capitalDisponivel) {
+        await saveFinanceEngineMutation.mutateAsync({
+          projectId: project.id,
+          tmaUtilizada: data.tmaUtilizada ? Number(data.tmaUtilizada) : undefined,
+          capitalDisponivel: data.capitalDisponivel ? Number(data.capitalDisponivel) : undefined,
+        });
+      }
+
+      if (data.regimeTributario) {
+        await saveTaxEngineMutation.mutateAsync({
+          projectId: project.id,
+          regimeTributario: data.regimeTributario,
+        });
+      }
+
+      toast.success("Estudo de viabilidade criado com sucesso!");
+      onOpenChange(false);
+      onSuccess?.();
+      setData(WIZARD_DATA_DEFAULTS);
+      setCurrentStep("info");
+    } catch (error) {
+      toast.error(`Erro ao criar estudo: ${error instanceof Error ? error.message : "erro desconhecido"}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const updateData = (key: keyof WizardData, value: string) => {
@@ -236,7 +299,7 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
 
   const stepIndex = (id: Step) => STEPS.findIndex((s) => s.id === id);
   const canAdvance = () => validateCurrentStep();
-  const isCreating = createProjectMutation.isPending;
+  const isCreating = isSaving;
 
   const renderStepContent = () => {
     switch (currentStep) {
@@ -294,7 +357,7 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="areaBruta">Área Bruta (m²) *</Label>
+                <Label htmlFor="areaBruta">Área Bruta da Gleba (m²) *</Label>
                 <Input
                   id="areaBruta"
                   type="number"
@@ -305,37 +368,90 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
                 />
               </div>
               <div>
-                <Label htmlFor="areaVerde">Área Verde (m²)</Label>
+                <Label htmlFor="areaAPP">APP / Reserva Legal (m²)</Label>
                 <Input
-                  id="areaVerde"
+                  id="areaAPP"
                   type="number"
                   placeholder="0"
-                  value={data.areaVerde}
-                  onChange={(e) => updateData("areaVerde", e.target.value)}
+                  value={data.areaAPP}
+                  onChange={(e) => updateData("areaAPP", e.target.value)}
+                  className="mt-2"
+                />
+                <p className="text-xs text-muted-foreground mt-1">Deduzida da gleba antes dos percentuais de área pública</p>
+              </div>
+              <div>
+                <Label htmlFor="percentualVerde">Área Verde (%)</Label>
+                <Input
+                  id="percentualVerde"
+                  type="number"
+                  placeholder="15"
+                  value={data.percentualVerde}
+                  onChange={(e) => updateData("percentualVerde", e.target.value)}
                   className="mt-2"
                 />
               </div>
               <div>
-                <Label htmlFor="areaInstitucional">Área Institucional (m²)</Label>
+                <Label htmlFor="percentualInstitucional">Área Institucional (%)</Label>
                 <Input
-                  id="areaInstitucional"
+                  id="percentualInstitucional"
                   type="number"
-                  placeholder="0"
-                  value={data.areaInstitucional}
-                  onChange={(e) => updateData("areaInstitucional", e.target.value)}
+                  placeholder="5"
+                  value={data.percentualInstitucional}
+                  onChange={(e) => updateData("percentualInstitucional", e.target.value)}
                   className="mt-2"
                 />
               </div>
               <div>
-                <Label htmlFor="sistemaViario">Sistema Viário (m²)</Label>
+                <Label htmlFor="percentualSistemaViario">Sistema Viário (%)</Label>
                 <Input
-                  id="sistemaViario"
+                  id="percentualSistemaViario"
                   type="number"
-                  placeholder="0"
-                  value={data.sistemaViario}
-                  onChange={(e) => updateData("sistemaViario", e.target.value)}
+                  placeholder="20"
+                  value={data.percentualSistemaViario}
+                  onChange={(e) => updateData("percentualSistemaViario", e.target.value)}
                   className="mt-2"
                 />
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-border/40">
+              <Label htmlFor="modoLotes">Quantidade de Lotes</Label>
+              <Select value={data.modoLotes} onValueChange={(value) => updateData("modoLotes", value as any)}>
+                <SelectTrigger id="modoLotes" className="mt-2">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="automatico">Automático (área ÷ lote-alvo)</SelectItem>
+                  <SelectItem value="manual">Manual (informar quantidade)</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                {data.modoLotes === "automatico" ? (
+                  <div>
+                    <Label htmlFor="areaMediaLoteAlvo">Área Média do Lote-Alvo (m²) *</Label>
+                    <Input
+                      id="areaMediaLoteAlvo"
+                      type="number"
+                      placeholder="250"
+                      value={data.areaMediaLoteAlvo}
+                      onChange={(e) => updateData("areaMediaLoteAlvo", e.target.value)}
+                      className="mt-2"
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <Label htmlFor="numeroLotesManual">Número de Lotes *</Label>
+                    <Input
+                      id="numeroLotesManual"
+                      type="number"
+                      placeholder="0"
+                      value={data.numeroLotesManual}
+                      onChange={(e) => updateData("numeroLotesManual", e.target.value)}
+                      className="mt-2"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -3,9 +3,33 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { getProjectsByUserId, getProjectById, createProject, updateProject, deleteProject, getGeoEngineDataByProjectId } from "./db";
+import {
+  getProjectsByUserId,
+  getProjectById,
+  createProject,
+  updateProject,
+  deleteProject,
+  getGeoEngineDataByProjectId,
+  getCostEngineDataByProjectId,
+  upsertCostEngineData,
+  getSalesEngineDataByProjectId,
+  upsertSalesEngineData,
+  getFinanceEngineDataByProjectId,
+  upsertFinanceEngineData,
+  getTaxEngineDataByProjectId,
+  upsertTaxEngineData,
+} from "./db";
 import { runGeoEngine } from "./services/geoEngineService";
 import { TRPCError } from "@trpc/server";
+
+/** Garante que o projeto existe e pertence ao usuário antes de ler/gravar dados de um motor. */
+async function requireOwnedProject(projectId: number, userId: number) {
+  const project = await getProjectById(projectId, userId);
+  if (!project) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Projeto não encontrado" });
+  }
+  return project;
+}
 
 export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -139,6 +163,118 @@ export const appRouter = router({
             message: error instanceof Error ? error.message : "Falha ao calcular GeoEngine",
           });
         }
+      }),
+  }),
+
+  // CostEngine, SalesEngine, FinanceEngine e TaxEngine ainda não existem como
+  // motores de cálculo (ver Etapa 6 em diante da spec) — estas rotas apenas
+  // persistem os dados brutos coletados pelo StudyWizard nas tabelas já
+  // existentes no schema, em vez de descartá-los como acontecia antes.
+  costEngine: router({
+    getByProjectId: protectedProcedure
+      .input(z.object({ projectId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        await requireOwnedProject(input.projectId, ctx.user.id);
+        return await getCostEngineDataByProjectId(input.projectId);
+      }),
+
+    save: protectedProcedure
+      .input(
+        z.object({
+          projectId: z.number(),
+          terraplanagem: z.number().optional(),
+          pavimentacao: z.number().optional(),
+          agua: z.number().optional(),
+          esgoto: z.number().optional(),
+          energia: z.number().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await requireOwnedProject(input.projectId, ctx.user.id);
+        const { projectId, ...rest } = input;
+        return await upsertCostEngineData(projectId, {
+          terraplanagem: rest.terraplanagem !== undefined ? String(rest.terraplanagem) : undefined,
+          pavimentacao: rest.pavimentacao !== undefined ? String(rest.pavimentacao) : undefined,
+          agua: rest.agua !== undefined ? String(rest.agua) : undefined,
+          esgoto: rest.esgoto !== undefined ? String(rest.esgoto) : undefined,
+          energia: rest.energia !== undefined ? String(rest.energia) : undefined,
+        });
+      }),
+  }),
+
+  salesEngine: router({
+    getByProjectId: protectedProcedure
+      .input(z.object({ projectId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        await requireOwnedProject(input.projectId, ctx.user.id);
+        return await getSalesEngineDataByProjectId(input.projectId);
+      }),
+
+    save: protectedProcedure
+      .input(
+        z.object({
+          projectId: z.number(),
+          vgv: z.number().optional(),
+          precoMedioM2: z.number().optional(),
+          velocidadeVendas: z.number().optional(), // lotes/mês — gravado dentro de curvaVendas
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await requireOwnedProject(input.projectId, ctx.user.id);
+        const { projectId, velocidadeVendas, ...rest } = input;
+        return await upsertSalesEngineData(projectId, {
+          vgv: rest.vgv !== undefined ? String(rest.vgv) : undefined,
+          precoMedioM2: rest.precoMedioM2 !== undefined ? String(rest.precoMedioM2) : undefined,
+          curvaVendas: velocidadeVendas !== undefined ? { velocidadeMensalLotes: velocidadeVendas } : undefined,
+        });
+      }),
+  }),
+
+  financeEngine: router({
+    getByProjectId: protectedProcedure
+      .input(z.object({ projectId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        await requireOwnedProject(input.projectId, ctx.user.id);
+        return await getFinanceEngineDataByProjectId(input.projectId);
+      }),
+
+    save: protectedProcedure
+      .input(
+        z.object({
+          projectId: z.number(),
+          tmaUtilizada: z.number().optional(),
+          capitalDisponivel: z.number().optional(), // gravado como capitalProprio
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await requireOwnedProject(input.projectId, ctx.user.id);
+        const { projectId, capitalDisponivel, ...rest } = input;
+        return await upsertFinanceEngineData(projectId, {
+          tmaUtilizada: rest.tmaUtilizada !== undefined ? String(rest.tmaUtilizada) : undefined,
+          capitalProprio: capitalDisponivel !== undefined ? String(capitalDisponivel) : undefined,
+        });
+      }),
+  }),
+
+  taxEngine: router({
+    getByProjectId: protectedProcedure
+      .input(z.object({ projectId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        await requireOwnedProject(input.projectId, ctx.user.id);
+        return await getTaxEngineDataByProjectId(input.projectId);
+      }),
+
+    save: protectedProcedure
+      .input(
+        z.object({
+          projectId: z.number(),
+          regimeTributario: z.enum(["ret", "lucro_presumido", "lucro_real"]),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await requireOwnedProject(input.projectId, ctx.user.id);
+        const { projectId, ...rest } = input;
+        return await upsertTaxEngineData(projectId, rest);
       }),
   }),
 });
