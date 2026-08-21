@@ -70,6 +70,48 @@ function KpiCard({
   );
 }
 
+const LEGAL_STATUS_LABELS: Record<string, string> = {
+  ok: "OK",
+  rever_atencao: "Rever/Atenção",
+  nao_verificavel: "N/V",
+};
+
+const LEGAL_STATUS_COLORS: Record<string, string> = {
+  ok: "bg-green-100 text-green-800",
+  rever_atencao: "bg-red-100 text-red-800",
+  nao_verificavel: "bg-gray-100 text-gray-800",
+};
+
+function LegalComplianceCard({ projectId }: { projectId: number }) {
+  const { data, isLoading } = trpc.legalCompliance.getChecklist.useQuery({ projectId }, { enabled: Number.isFinite(projectId) });
+
+  if (isLoading) return <Skeleton className="h-40" />;
+  if (!data) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Conformidade Legal — Lei 6.766/79</CardTitle>
+        <CardDescription>{data.avisoPisoFederal}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {data.itens.map((item) => (
+          <div key={item.id} className="flex items-start justify-between gap-2 py-1.5 border-b last:border-0 text-sm">
+            <div className="flex-1">
+              <p className="font-medium">{item.requisito}</p>
+              <p className="text-xs text-muted-foreground">{item.regra}</p>
+              {(item.valorAtual || item.observacao) && (
+                <p className="text-xs text-muted-foreground mt-0.5">{item.valorAtual ?? item.observacao}</p>
+              )}
+            </div>
+            <Badge className={`${LEGAL_STATUS_COLORS[item.status]} shrink-0`}>{LEGAL_STATUS_LABELS[item.status]}</Badge>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Dashboard() {
   const params = useParams<{ id: string }>();
   const projectId = Number(params.id);
@@ -296,6 +338,8 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      <LegalComplianceCard projectId={projectId} />
 
       {/* Painel de alertas de consistência */}
       <Card>
