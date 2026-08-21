@@ -182,7 +182,7 @@ export const scenarios = mysqlTable("scenarios", {
   id: int("id").autoincrement().primaryKey(),
   projectId: int("projectId").notNull(), // Foreign key to projects
   nome: varchar("nome", { length: 255 }).notNull(), // Nome do cenário (ex: Otimista, Realista, Pessimista)
-  tipo: mysqlEnum("tipo", ["otimista", "realista", "pessimista", "customizado"]).notNull(),
+  tipo: mysqlEnum("tipo", ["otimista", "realista", "conservador", "customizado"]).notNull(), // nomenclatura da spec seção 2.10 (Conservador/Realista/Otimista)
   descricao: text("descricao"), // Descrição do cenário
   variacaoVGV: decimal("variacaoVGV", { precision: 8, scale: 4 }), // Variação de VGV (%)
   variacaoCustos: decimal("variacaoCustos", { precision: 8, scale: 4 }), // Variação de custos (%)
@@ -194,6 +194,25 @@ export const scenarios = mysqlTable("scenarios", {
 
 export type Scenario = typeof scenarios.$inferSelect;
 export type InsertScenario = typeof scenarios.$inferInsert;
+
+/**
+ * Análise de Parceria (permuta por lotes físicos) — spec seção 2.10.
+ * Um registro por projeto, sobrescrito a cada recálculo (mesmo padrão das
+ * tabelas de dados de engine — geo/cost/sales/finance/tax).
+ */
+export const partnershipAnalysis = mysqlTable("partnership_analysis", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId").notNull(), // Foreign key to projects
+  percentualParceriaTerreno: decimal("percentualParceriaTerreno", { precision: 6, scale: 4 }).notNull(), // fração 0-1
+  resultado: json("resultado").notNull(), // ResultadoParceria (lotes/VGV/receita/lucro/percentual de equilíbrio)
+  matrizSensibilidade1: json("matrizSensibilidade1"), // lucro incorporadora × (cenário × % participação terreneiro)
+  matrizSensibilidade2: json("matrizSensibilidade2"), // lucro incorporadora × (variação de preço × % permuta)
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PartnershipAnalysis = typeof partnershipAnalysis.$inferSelect;
+export type InsertPartnershipAnalysis = typeof partnershipAnalysis.$inferInsert;
 
 // ============================================================================
 // MÓDULO DE CONFIGURAÇÃO (camada administrativa global — spec seção 5)
@@ -372,7 +391,7 @@ export type InsertConfigTaxRegime = typeof configTaxRegimes.$inferInsert;
 export const configSnapshots = mysqlTable("config_snapshots", {
   id: int("id").autoincrement().primaryKey(),
   projectId: int("projectId").notNull(), // Foreign key to projects
-  engine: mysqlEnum("engine", ["geo_engine", "cost_engine", "sales_engine", "finance_engine", "tax_engine", "full"]).notNull(),
+  engine: mysqlEnum("engine", ["geo_engine", "cost_engine", "sales_engine", "finance_engine", "tax_engine", "scenario_engine", "full"]).notNull(),
   snapshotData: json("snapshotData").notNull(), // cópia completa dos valores de configuração usados neste cálculo
   overrides: json("overrides"), // overrides pontuais feitos neste estudo específico (ex: "BDI 22% em vez de 25%")
   calculatedAt: timestamp("calculatedAt").defaultNow().notNull(),

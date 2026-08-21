@@ -1,0 +1,1 @@
+ALTER TABLE `config_snapshots` MODIFY COLUMN `engine` enum('geo_engine','cost_engine','sales_engine','finance_engine','tax_engine','scenario_engine','full') NOT NULL;

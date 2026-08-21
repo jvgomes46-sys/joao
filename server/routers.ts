@@ -18,12 +18,15 @@ import {
   upsertFinanceEngineData,
   getTaxEngineDataByProjectId,
   upsertTaxEngineData,
+  getScenariosByProjectId,
+  getPartnershipAnalysisByProjectId,
 } from "./db";
 import { runGeoEngine } from "./services/geoEngineService";
 import { runCostEngine } from "./services/costEngineService";
 import { runFinanceEngine } from "./services/financeEngineService";
 import { runSalesEngine } from "./services/salesEngineService";
 import { runTaxEngine } from "./services/taxEngineService";
+import { runScenarioEngine } from "./services/scenarioEngineService";
 import { TRPCError } from "@trpc/server";
 
 /** Garante que o projeto existe e pertence ao usuário antes de ler/gravar dados de um motor. */
@@ -403,6 +406,57 @@ export const appRouter = router({
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: error instanceof Error ? error.message : "Falha ao calcular TaxEngine",
+          });
+        }
+      }),
+  }),
+
+  scenarioEngine: router({
+    getByProjectId: protectedProcedure
+      .input(z.object({ projectId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        await requireOwnedProject(input.projectId, ctx.user.id);
+        const [cenarios, parceria] = await Promise.all([
+          getScenariosByProjectId(input.projectId),
+          getPartnershipAnalysisByProjectId(input.projectId),
+        ]);
+        return { cenarios, parceria };
+      }),
+
+    calculate: protectedProcedure
+      .input(
+        z.object({
+          projectId: z.number(),
+          duracaoAprovacoesMeses: z.number().positive(),
+          inicioVendasMes: z.number().int().positive(),
+          precoBrutoPorLote: z.number().positive(),
+          prazoVendasMeses: z.number().positive(),
+          curvaVendas: z.enum(["constante", "rampa", "curva_s"]),
+          percentualDeducoesVenda: z.number().min(0).max(1),
+          percentualEntrada: z.number().min(0).max(1),
+          numeroParcelas: z.number().int().positive(),
+          tmaAnualFracao: z.number().min(0).max(5),
+          reinvestirCaixaPositivo: z.boolean().optional(),
+          custosIndexados: z.boolean().optional(),
+          indiceCustosAnualFracao: z.number().min(0).max(5).optional(),
+          recebiveisIndexados: z.boolean().optional(),
+          indiceRecebiveisAnualFracao: z.number().min(0).max(5).optional(),
+          capexAprovacoesTotal: z.number().min(0).optional(),
+          curvaObra: z.enum(["linear", "curva_s"]).optional(),
+          horizonteMeses: z.number().positive().optional(),
+          percentualParceriaTerreno: z.number().min(0).max(1).optional(),
+          percentuaisParceriaSensibilidade: z.array(z.number().min(0).max(1)).optional(),
+          variacoesPrecoSensibilidade: z.array(z.number().min(-1).max(5)).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { projectId, ...scenarioInput } = input;
+        try {
+          return await runScenarioEngine(projectId, ctx.user.id, scenarioInput);
+        } catch (error) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: error instanceof Error ? error.message : "Falha ao calcular Cenários",
           });
         }
       }),

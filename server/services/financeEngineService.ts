@@ -56,26 +56,21 @@ const MAPA_CAMPO_PARA_GRUPO_JANELA: Record<(typeof GRUPOS_COST_ENGINE_PARA_FLUXO
   portaria: "obras_civis_condominio",
 };
 
-/**
- * Orquestra o cálculo do FinanceEngine para um projeto:
- * 1. Exige GeoEngine e CostEngine já calculados (fluxo de caixa não existe
- *    sem quantidade de lotes e sem orçamento de obra).
- * 2. Reconstrói os totais por grupo do CostEngine (escalados para incluir o
- *    BDI, já que `cost_engine_data` grava os totais pré-BDI) para alimentar
- *    a curva física de desembolso por disciplina.
- * 3. Se a indexação não vier explícita, usa os índices INCC/IPCA vigentes
- *    do Módulo de Configuração.
- * 4. Roda o cálculo puro (`calcularFinanceEngine`) — fluxo de 120 meses,
- *    VPL/TIR/payback/exposição, alertas de consistência.
- * 5. Persiste o resultado (indicadores + fluxo mensal completo) e grava o
- *    snapshot de configuração obrigatório (seção 5.3).
- */
-export async function runFinanceEngine(projectId: number, userId: number, input: FinanceEngineServiceInput): Promise<FinanceEngineOutput> {
-  const project = await getProjectById(projectId, userId);
-  if (!project) {
-    throw new Error("Projeto não encontrado ou não pertence ao usuário");
-  }
+export interface FinanceEngineBaseBuild {
+  financeInput: FinanceEngineInput;
+  bdiPercentualImplicito: number;
+  indiceCustosAnualFracao: number | undefined;
+  indiceRecebiveisAnualFracao: number | undefined;
+}
 
+/**
+ * Reconstrói o FinanceEngineInput completo a partir do que já está
+ * persistido (GeoEngine + CostEngine) mais os parâmetros financeiros
+ * explícitos do chamador. Compartilhado entre runFinanceEngine e o
+ * ScenarioEngine (que roda o mesmo FinanceEngine várias vezes com preço/
+ * prazo/CAPEX variados) — nunca duplicar essa reconstrução.
+ */
+export async function buildFinanceEngineInput(projectId: number, input: FinanceEngineServiceInput): Promise<FinanceEngineBaseBuild> {
   const geo = await getGeoEngineDataByProjectId(projectId);
   if (!geo || geo.numeroLotes === null) {
     throw new Error("FinanceEngine depende do GeoEngine — calcule o GeoEngine deste projeto antes (número de lotes vem de lá)");
@@ -142,6 +137,34 @@ export async function runFinanceEngine(projectId: number, userId: number, input:
     gruposCustoObra,
     capexTotal,
   };
+
+  return { financeInput, bdiPercentualImplicito, indiceCustosAnualFracao, indiceRecebiveisAnualFracao };
+}
+
+/**
+ * Orquestra o cálculo do FinanceEngine para um projeto:
+ * 1. Exige GeoEngine e CostEngine já calculados (fluxo de caixa não existe
+ *    sem quantidade de lotes e sem orçamento de obra).
+ * 2. Reconstrói os totais por grupo do CostEngine (escalados para incluir o
+ *    BDI, já que `cost_engine_data` grava os totais pré-BDI) para alimentar
+ *    a curva física de desembolso por disciplina.
+ * 3. Se a indexação não vier explícita, usa os índices INCC/IPCA vigentes
+ *    do Módulo de Configuração.
+ * 4. Roda o cálculo puro (`calcularFinanceEngine`) — fluxo de 120 meses,
+ *    VPL/TIR/payback/exposição, alertas de consistência.
+ * 5. Persiste o resultado (indicadores + fluxo mensal completo) e grava o
+ *    snapshot de configuração obrigatório (seção 5.3).
+ */
+export async function runFinanceEngine(projectId: number, userId: number, input: FinanceEngineServiceInput): Promise<FinanceEngineOutput> {
+  const project = await getProjectById(projectId, userId);
+  if (!project) {
+    throw new Error("Projeto não encontrado ou não pertence ao usuário");
+  }
+
+  const { financeInput, bdiPercentualImplicito, indiceCustosAnualFracao, indiceRecebiveisAnualFracao } = await buildFinanceEngineInput(
+    projectId,
+    input
+  );
 
   const output = calcularFinanceEngine(financeInput);
 

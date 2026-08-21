@@ -15,6 +15,10 @@ import {
   InsertFinanceEngineData,
   taxEngineData,
   InsertTaxEngineData,
+  scenarios,
+  InsertScenario,
+  partnershipAnalysis,
+  InsertPartnershipAnalysis,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -309,6 +313,40 @@ const taxEngineAccessors = createEngineDataAccessors<typeof taxEngineData, any, 
 export const getTaxEngineDataByProjectId = taxEngineAccessors.getByProjectId;
 export async function upsertTaxEngineData(projectId: number, data: Omit<InsertTaxEngineData, "projectId" | "id">) {
   return taxEngineAccessors.upsert(projectId, data);
+}
+
+// PartnershipAnalysis data — um registro por projeto, sobrescrito a cada recálculo
+const partnershipAnalysisAccessors = createEngineDataAccessors<typeof partnershipAnalysis, any, InsertPartnershipAnalysis>(
+  partnershipAnalysis,
+  "partnership analysis",
+  ["resultado", "matrizSensibilidade1", "matrizSensibilidade2"]
+);
+export const getPartnershipAnalysisByProjectId = partnershipAnalysisAccessors.getByProjectId;
+export async function upsertPartnershipAnalysis(projectId: number, data: Omit<InsertPartnershipAnalysis, "projectId" | "id">) {
+  return partnershipAnalysisAccessors.upsert(projectId, data);
+}
+
+// Scenarios — múltiplos registros por projeto (um por cenário). Recalcular
+// substitui o conjunto inteiro, não acumula execuções antigas.
+export async function getScenariosByProjectId(projectId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get scenarios: database not available");
+    return [];
+  }
+  const rows = await db.select().from(scenarios).where(eq(scenarios.projectId, projectId));
+  return rows.map((row) => ({ ...row, resultados: parseJsonColumn(row.resultados) }));
+}
+
+export async function replaceScenarios(projectId: number, data: Omit<InsertScenario, "projectId" | "id">[]) {
+  const db = await getDb();
+  if (!db) throw new Error("[Database] Cannot persist scenarios: database not available");
+
+  await db.delete(scenarios).where(eq(scenarios.projectId, projectId));
+  if (data.length > 0) {
+    await db.insert(scenarios).values(data.map((row) => ({ ...row, projectId })));
+  }
+  return getScenariosByProjectId(projectId);
 }
 
 // TODO: add feature queries here as your schema grows.
