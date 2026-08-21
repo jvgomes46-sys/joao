@@ -1,12 +1,12 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { AlertCircle, CheckCircle2, ChevronRight, Building2, Hammer, TrendingUp, DollarSign, FileText, MapPin } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { trpc } from "@/lib/trpc";
@@ -17,10 +17,13 @@ import { useIsMobile } from "@/hooks/useMobile";
 type Step = "info" | "geo" | "cost" | "sales" | "finance" | "tax" | "review";
 
 interface WizardData {
+  // Informações
   name: string;
   description: string;
   type: "loteamento" | "condominio" | "incorporacao" | "";
   location: string;
+
+  // GeoEngine
   areaBruta: string;
   areaAPP: string;
   percentualVerde: string;
@@ -29,16 +32,49 @@ interface WizardData {
   modoLotes: "automatico" | "manual";
   areaMediaLoteAlvo: string;
   numeroLotesManual: string;
-  terraplanagem: string;
-  pavimentacao: string;
-  agua: string;
-  esgoto: string;
-  energia: string;
-  vgv: string;
-  precoMedioM2: string;
-  velocidadeVendas: string;
-  tmaUtilizada: string;
-  capitalDisponivel: string;
+
+  // CostEngine
+  tipologia: "loteamento_popular" | "loteamento_aberto" | "condominio_fechado" | "condominio_chacaras";
+  topografia: "plana" | "ondulada" | "acidentada";
+  padraoPavimentacao: "asfalto" | "paver";
+  solucaoEsgoto: "fossa" | "rede_publica" | "ete_propria";
+  necessitaElevatoria: boolean;
+  solucaoAgua: "poco" | "rede_publica";
+  isChacara: boolean;
+  areaSupressaoVegetalM2: string;
+  arvoresIsoladasUn: string;
+  participacaoEletrica: "cliente_paga" | "concessionaria_cobre";
+  contingenciaPercentual: string;
+  custoFinanceiroPercentual: string;
+
+  // SalesEngine
+  modoPreco: "automatico" | "manual";
+  agioPercentual: string;
+  precoManualM2: string;
+  modoAbsorcao: "automatico" | "manual";
+  absorcaoManualLotesMes: string;
+  comissaoPercentual: string;
+  marketingPercentual: string;
+  impostosPercentual: string;
+  inadimplenciaPercentual: string;
+  despesasAdministrativasPercentual: string;
+
+  // FinanceEngine
+  duracaoAprovacoesMeses: string;
+  inicioVendasMes: string;
+  curvaVendas: "constante" | "rampa" | "curva_s";
+  percentualEntrada: string;
+  numeroParcelas: string;
+  tmaAnual: string;
+  reinvestirCaixaPositivo: boolean;
+  custosIndexados: boolean;
+  indiceCustosAnualFracao: string;
+  recebiveisIndexados: boolean;
+  indiceRecebiveisAnualFracao: string;
+  capexAprovacoesTotal: string;
+  curvaObra: "linear" | "curva_s";
+
+  // TaxEngine (ainda não é motor de cálculo — só gravação simples)
   regimeTributario: "ret" | "lucro_presumido" | "lucro_real" | "";
 }
 
@@ -47,6 +83,7 @@ const WIZARD_DATA_DEFAULTS: WizardData = {
   description: "",
   type: "",
   location: "",
+
   areaBruta: "",
   areaAPP: "",
   percentualVerde: "15",
@@ -55,69 +92,62 @@ const WIZARD_DATA_DEFAULTS: WizardData = {
   modoLotes: "automatico",
   areaMediaLoteAlvo: "",
   numeroLotesManual: "",
-  terraplanagem: "",
-  pavimentacao: "",
-  agua: "",
-  esgoto: "",
-  energia: "",
-  vgv: "",
-  precoMedioM2: "",
-  velocidadeVendas: "",
-  tmaUtilizada: "",
-  capitalDisponivel: "",
+
+  tipologia: "loteamento_aberto",
+  topografia: "plana",
+  padraoPavimentacao: "asfalto",
+  solucaoEsgoto: "rede_publica",
+  necessitaElevatoria: false,
+  solucaoAgua: "rede_publica",
+  isChacara: false,
+  areaSupressaoVegetalM2: "",
+  arvoresIsoladasUn: "",
+  participacaoEletrica: "concessionaria_cobre",
+  contingenciaPercentual: "5",
+  custoFinanceiroPercentual: "6",
+
+  modoPreco: "automatico",
+  agioPercentual: "0",
+  precoManualM2: "",
+  modoAbsorcao: "automatico",
+  absorcaoManualLotesMes: "",
+  comissaoPercentual: "6",
+  marketingPercentual: "3",
+  impostosPercentual: "6",
+  inadimplenciaPercentual: "5",
+  despesasAdministrativasPercentual: "4",
+
+  duracaoAprovacoesMeses: "12",
+  inicioVendasMes: "6",
+  curvaVendas: "curva_s",
+  percentualEntrada: "20",
+  numeroParcelas: "120",
+  tmaAnual: "14",
+  reinvestirCaixaPositivo: false,
+  custosIndexados: true,
+  indiceCustosAnualFracao: "",
+  recebiveisIndexados: true,
+  indiceRecebiveisAnualFracao: "",
+  capexAprovacoesTotal: "0",
+  curvaObra: "curva_s",
+
   regimeTributario: "",
 };
 
+/** Campos que a UI mostra como percentual "0 a 100" mas a API espera como fração "0 a 1". */
+function frac(v: string): number | undefined {
+  if (!v) return undefined;
+  return Number(v) / 100;
+}
+
 const STEPS: { id: Step; label: string; title: string; description: string; icon: React.ReactNode }[] = [
-  {
-    id: "info",
-    label: "Informações",
-    title: "Dados Básicos",
-    description: "Nome, tipo e localização do empreendimento",
-    icon: <Building2 className="w-5 h-5" />,
-  },
-  {
-    id: "geo",
-    label: "Urbanístico",
-    title: "GeoEngine",
-    description: "Análise de áreas conforme Lei 6.766/79",
-    icon: <MapPin className="w-5 h-5" />,
-  },
-  {
-    id: "cost",
-    label: "Engenharia",
-    title: "CostEngine",
-    description: "Orçamento de infraestrutura",
-    icon: <Hammer className="w-5 h-5" />,
-  },
-  {
-    id: "sales",
-    label: "Comercial",
-    title: "SalesEngine",
-    description: "VGV e projeção de vendas",
-    icon: <TrendingUp className="w-5 h-5" />,
-  },
-  {
-    id: "finance",
-    label: "Financeiro",
-    title: "FinanceEngine",
-    description: "FCD, VPL, TIR e indicadores",
-    icon: <DollarSign className="w-5 h-5" />,
-  },
-  {
-    id: "tax",
-    label: "Tributário",
-    title: "TaxEngine",
-    description: "RET, Lucro Presumido, IBS/CBS",
-    icon: <FileText className="w-5 h-5" />,
-  },
-  {
-    id: "review",
-    label: "Revisão",
-    title: "Confirmar",
-    description: "Revise os dados antes de criar",
-    icon: <CheckCircle2 className="w-5 h-5" />,
-  },
+  { id: "info", label: "Informações", title: "Dados Básicos", description: "Nome, tipo e localização do empreendimento", icon: <Building2 className="w-5 h-5" /> },
+  { id: "geo", label: "Urbanístico", title: "GeoEngine", description: "Análise de áreas conforme Lei 6.766/79", icon: <MapPin className="w-5 h-5" /> },
+  { id: "cost", label: "Engenharia", title: "CostEngine", description: "Orçamento de infraestrutura", icon: <Hammer className="w-5 h-5" /> },
+  { id: "sales", label: "Comercial", title: "SalesEngine", description: "VGV e projeção de vendas", icon: <TrendingUp className="w-5 h-5" /> },
+  { id: "finance", label: "Financeiro", title: "FinanceEngine", description: "Fluxo de caixa, VPL, TIR e indicadores", icon: <DollarSign className="w-5 h-5" /> },
+  { id: "tax", label: "Tributário", title: "TaxEngine", description: "RET, Lucro Presumido, IBS/CBS", icon: <FileText className="w-5 h-5" /> },
+  { id: "review", label: "Revisão", title: "Confirmar", description: "Revise os dados antes de criar", icon: <CheckCircle2 className="w-5 h-5" /> },
 ];
 
 interface StudyWizardProps {
@@ -134,9 +164,9 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
 
   const createProjectMutation = trpc.projects.create.useMutation();
   const calculateGeoEngineMutation = trpc.geoEngine.calculate.useMutation();
-  const saveCostEngineMutation = trpc.costEngine.save.useMutation();
-  const saveSalesEngineMutation = trpc.salesEngine.save.useMutation();
-  const saveFinanceEngineMutation = trpc.financeEngine.save.useMutation();
+  const calculateCostEngineMutation = trpc.costEngine.calculate.useMutation();
+  const calculateSalesEngineMutation = trpc.salesEngine.calculate.useMutation();
+  const calculateFinanceEngineMutation = trpc.financeEngine.calculate.useMutation();
   const saveTaxEngineMutation = trpc.taxEngine.save.useMutation();
 
   const currentStepIndex = STEPS.findIndex((s) => s.id === currentStep);
@@ -169,20 +199,32 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
         }
         return true;
       case "cost":
-        if (!data.terraplanagem && !data.pavimentacao && !data.agua && !data.esgoto && !data.energia) {
-          toast.error("Preencha pelo menos um custo de infraestrutura");
+        if (data.solucaoEsgoto === "rede_publica" && data.necessitaElevatoria === undefined) {
+          toast.error("Informe se o projeto necessita de estação elevatória");
           return false;
         }
         return true;
       case "sales":
-        if (!data.vgv) {
-          toast.error("Preencha o VGV total");
+        if (data.modoPreco === "manual" && (!data.precoManualM2 || Number(data.precoManualM2) <= 0)) {
+          toast.error("Preencha o preço manual (R$/m²)");
+          return false;
+        }
+        if (data.modoAbsorcao === "manual" && (!data.absorcaoManualLotesMes || Number(data.absorcaoManualLotesMes) <= 0)) {
+          toast.error("Preencha a absorção manual (lotes/mês)");
           return false;
         }
         return true;
       case "finance":
-        if (!data.tmaUtilizada) {
-          toast.error("Preencha a Taxa Mínima de Atratividade");
+        if (!data.tmaAnual || Number(data.tmaAnual) <= 0) {
+          toast.error("Preencha a Taxa Mínima de Atratividade (% a.a.)");
+          return false;
+        }
+        if (!data.duracaoAprovacoesMeses || Number(data.duracaoAprovacoesMeses) <= 0) {
+          toast.error("Preencha a duração das aprovações (meses)");
+          return false;
+        }
+        if (!data.inicioVendasMes || Number(data.inicioVendasMes) <= 0) {
+          toast.error("Preencha o mês de início das vendas");
           return false;
         }
         return true;
@@ -214,6 +256,7 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
       toast.error("Preencha os campos obrigatórios");
       return;
     }
+    if (!validateCurrentStep()) return;
 
     setIsSaving(true);
     try {
@@ -223,57 +266,79 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
         type: data.type,
         location: data.location,
       });
+      if (!project) throw new Error("Falha ao criar o projeto");
 
-      if (!project) {
-        throw new Error("Falha ao criar o projeto");
-      }
+      // 1) GeoEngine — área, lotes, densidade. Todo o resto depende disto.
+      await calculateGeoEngineMutation.mutateAsync({
+        projectId: project.id,
+        areaBruta: Number(data.areaBruta),
+        areaAPP: data.areaAPP ? Number(data.areaAPP) : undefined,
+        percentualVerde: data.percentualVerde ? Number(data.percentualVerde) : undefined,
+        percentualInstitucional: data.percentualInstitucional ? Number(data.percentualInstitucional) : undefined,
+        percentualSistemaViario: data.percentualSistemaViario ? Number(data.percentualSistemaViario) : undefined,
+        modoLotes: data.modoLotes,
+        areaMediaLoteAlvo: data.modoLotes === "automatico" && data.areaMediaLoteAlvo ? Number(data.areaMediaLoteAlvo) : undefined,
+        numeroLotesManual: data.modoLotes === "manual" && data.numeroLotesManual ? Number(data.numeroLotesManual) : undefined,
+      });
 
-      // GeoEngine: só roda o cálculo se a etapa Urbanístico foi preenchida.
-      if (data.areaBruta) {
-        await calculateGeoEngineMutation.mutateAsync({
-          projectId: project.id,
-          areaBruta: Number(data.areaBruta),
-          areaAPP: data.areaAPP ? Number(data.areaAPP) : undefined,
-          percentualVerde: data.percentualVerde ? Number(data.percentualVerde) : undefined,
-          percentualInstitucional: data.percentualInstitucional ? Number(data.percentualInstitucional) : undefined,
-          percentualSistemaViario: data.percentualSistemaViario ? Number(data.percentualSistemaViario) : undefined,
-          modoLotes: data.modoLotes,
-          areaMediaLoteAlvo: data.modoLotes === "automatico" && data.areaMediaLoteAlvo ? Number(data.areaMediaLoteAlvo) : undefined,
-          numeroLotesManual: data.modoLotes === "manual" && data.numeroLotesManual ? Number(data.numeroLotesManual) : undefined,
-        });
-      }
+      // 2) CostEngine — orçamento parametrizado com toda a lógica condicional. Depende do GeoEngine.
+      await calculateCostEngineMutation.mutateAsync({
+        projectId: project.id,
+        topografia: data.topografia,
+        padraoPavimentacao: data.padraoPavimentacao,
+        solucaoEsgoto: data.solucaoEsgoto,
+        necessitaElevatoria: data.solucaoEsgoto === "rede_publica" ? data.necessitaElevatoria : undefined,
+        solucaoAgua: data.solucaoAgua,
+        isChacara: data.tipologia === "condominio_chacaras" ? data.isChacara : undefined,
+        areaSupressaoVegetalM2: data.areaSupressaoVegetalM2 ? Number(data.areaSupressaoVegetalM2) : undefined,
+        arvoresIsoladasUn: data.arvoresIsoladasUn ? Number(data.arvoresIsoladasUn) : undefined,
+        tipologia: data.tipologia,
+        participacaoEletrica: data.participacaoEletrica,
+        contingenciaPercentual: data.contingenciaPercentual ? Number(data.contingenciaPercentual) : undefined,
+        custoFinanceiroPercentual: data.custoFinanceiroPercentual ? Number(data.custoFinanceiroPercentual) : undefined,
+        custoAprovacoesTotal: data.capexAprovacoesTotal ? Number(data.capexAprovacoesTotal) : undefined,
+      });
 
-      // Etapas seguintes: CostEngine/SalesEngine/FinanceEngine/TaxEngine ainda
-      // não existem como motores de cálculo — persistimos os dados brutos
-      // coletados, em vez de descartá-los (eram descartados antes desta etapa).
-      if (data.terraplanagem || data.pavimentacao || data.agua || data.esgoto || data.energia) {
-        await saveCostEngineMutation.mutateAsync({
-          projectId: project.id,
-          terraplanagem: data.terraplanagem ? Number(data.terraplanagem) : undefined,
-          pavimentacao: data.pavimentacao ? Number(data.pavimentacao) : undefined,
-          agua: data.agua ? Number(data.agua) : undefined,
-          esgoto: data.esgoto ? Number(data.esgoto) : undefined,
-          energia: data.energia ? Number(data.energia) : undefined,
-        });
-      }
+      // 3) SalesEngine — preço, VGV, absorção. Depende do GeoEngine (lotes/área média).
+      const salesOutput = await calculateSalesEngineMutation.mutateAsync({
+        projectId: project.id,
+        tipologia: data.tipologia,
+        modoPreco: data.modoPreco,
+        agioPercentual: data.modoPreco === "automatico" ? frac(data.agioPercentual) : undefined,
+        precoManualM2: data.modoPreco === "manual" ? Number(data.precoManualM2) : undefined,
+        modoAbsorcao: data.modoAbsorcao,
+        absorcaoManualLotesMes: data.modoAbsorcao === "manual" ? Number(data.absorcaoManualLotesMes) : undefined,
+        comissaoPercentual: frac(data.comissaoPercentual) ?? 0,
+        marketingPercentual: frac(data.marketingPercentual) ?? 0,
+        impostosPercentual: frac(data.impostosPercentual) ?? 0,
+        inadimplenciaPercentual: frac(data.inadimplenciaPercentual) ?? 0,
+        despesasAdministrativasPercentual: frac(data.despesasAdministrativasPercentual) ?? 0,
+      });
 
-      if (data.vgv || data.precoMedioM2 || data.velocidadeVendas) {
-        await saveSalesEngineMutation.mutateAsync({
-          projectId: project.id,
-          vgv: data.vgv ? Number(data.vgv) : undefined,
-          precoMedioM2: data.precoMedioM2 ? Number(data.precoMedioM2) : undefined,
-          velocidadeVendas: data.velocidadeVendas ? Number(data.velocidadeVendas) : undefined,
-        });
-      }
+      // 4) FinanceEngine — fluxo de caixa de 120 meses, VPL/TIR/payback. Depende do GeoEngine + CostEngine;
+      // usa o preço/prazo de vendas que o SalesEngine acabou de calcular (não redigitado).
+      await calculateFinanceEngineMutation.mutateAsync({
+        projectId: project.id,
+        duracaoAprovacoesMeses: Number(data.duracaoAprovacoesMeses),
+        inicioVendasMes: Number(data.inicioVendasMes),
+        precoBrutoPorLote: salesOutput.precoBrutoPorLote,
+        prazoVendasMeses: salesOutput.prazoVendasMeses,
+        curvaVendas: data.curvaVendas,
+        percentualDeducoesVenda: salesOutput.percentualDeducoesVenda,
+        percentualEntrada: frac(data.percentualEntrada) ?? 0.2,
+        numeroParcelas: Number(data.numeroParcelas),
+        tmaAnualFracao: frac(data.tmaAnual) ?? 0.14,
+        reinvestirCaixaPositivo: data.reinvestirCaixaPositivo,
+        custosIndexados: data.custosIndexados,
+        indiceCustosAnualFracao: data.custosIndexados ? frac(data.indiceCustosAnualFracao) : undefined,
+        recebiveisIndexados: data.recebiveisIndexados,
+        indiceRecebiveisAnualFracao: data.recebiveisIndexados ? frac(data.indiceRecebiveisAnualFracao) : undefined,
+        capexAprovacoesTotal: data.capexAprovacoesTotal ? Number(data.capexAprovacoesTotal) : undefined,
+        curvaObra: data.curvaObra,
+      });
 
-      if (data.tmaUtilizada || data.capitalDisponivel) {
-        await saveFinanceEngineMutation.mutateAsync({
-          projectId: project.id,
-          tmaUtilizada: data.tmaUtilizada ? Number(data.tmaUtilizada) : undefined,
-          capitalDisponivel: data.capitalDisponivel ? Number(data.capitalDisponivel) : undefined,
-        });
-      }
-
+      // TaxEngine ainda não existe como motor de cálculo (spec Etapa 9+) —
+      // grava só o regime escolhido, sem descartar o dado.
       if (data.regimeTributario) {
         await saveTaxEngineMutation.mutateAsync({
           projectId: project.id,
@@ -281,7 +346,7 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
         });
       }
 
-      toast.success("Estudo de viabilidade criado com sucesso!");
+      toast.success("Estudo de viabilidade criado e calculado com sucesso!");
       onOpenChange(false);
       onSuccess?.();
       setData(WIZARD_DATA_DEFAULTS);
@@ -293,7 +358,7 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
     }
   };
 
-  const updateData = (key: keyof WizardData, value: string) => {
+  const updateData = <K extends keyof WizardData>(key: K, value: WizardData[K]) => {
     setData((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -308,17 +373,11 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
           <div className="space-y-4">
             <div>
               <Label htmlFor="name">Nome do Empreendimento *</Label>
-              <Input
-                id="name"
-                placeholder="Ex: Loteamento Residencial Alphaville"
-                value={data.name}
-                onChange={(e) => updateData("name", e.target.value)}
-                className="mt-2"
-              />
+              <Input id="name" placeholder="Ex: Loteamento Residencial Alphaville" value={data.name} onChange={(e) => updateData("name", e.target.value)} className="mt-2" />
             </div>
             <div>
               <Label htmlFor="type">Tipo de Empreendimento *</Label>
-              <Select value={data.type} onValueChange={(value) => updateData("type", value as any)}>
+              <Select value={data.type} onValueChange={(value) => updateData("type", value as WizardData["type"])}>
                 <SelectTrigger id="type" className="mt-2">
                   <SelectValue placeholder="Selecione o tipo" />
                 </SelectTrigger>
@@ -331,92 +390,46 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
             </div>
             <div>
               <Label htmlFor="location">Localização</Label>
-              <Input
-                id="location"
-                placeholder="Ex: São Paulo, SP"
-                value={data.location}
-                onChange={(e) => updateData("location", e.target.value)}
-                className="mt-2"
-              />
+              <Input id="location" placeholder="Ex: Formosa, GO" value={data.location} onChange={(e) => updateData("location", e.target.value)} className="mt-2" />
+              <p className="text-xs text-muted-foreground mt-1">A UF (ex: ", GO") é usada para buscar custos unitários regionais quando disponíveis</p>
             </div>
             <div>
               <Label htmlFor="description">Descrição</Label>
-              <Textarea
-                id="description"
-                placeholder="Descreva o empreendimento..."
-                value={data.description}
-                onChange={(e) => updateData("description", e.target.value)}
-                className="mt-2"
-                rows={3}
-              />
+              <Textarea id="description" placeholder="Descreva o empreendimento..." value={data.description} onChange={(e) => updateData("description", e.target.value)} className="mt-2" rows={3} />
             </div>
           </div>
         );
+
       case "geo":
         return (
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="areaBruta">Área Bruta da Gleba (m²) *</Label>
-                <Input
-                  id="areaBruta"
-                  type="number"
-                  placeholder="0"
-                  value={data.areaBruta}
-                  onChange={(e) => updateData("areaBruta", e.target.value)}
-                  className="mt-2"
-                />
+                <Input id="areaBruta" type="number" placeholder="0" value={data.areaBruta} onChange={(e) => updateData("areaBruta", e.target.value)} className="mt-2" />
               </div>
               <div>
                 <Label htmlFor="areaAPP">APP / Reserva Legal (m²)</Label>
-                <Input
-                  id="areaAPP"
-                  type="number"
-                  placeholder="0"
-                  value={data.areaAPP}
-                  onChange={(e) => updateData("areaAPP", e.target.value)}
-                  className="mt-2"
-                />
+                <Input id="areaAPP" type="number" placeholder="0" value={data.areaAPP} onChange={(e) => updateData("areaAPP", e.target.value)} className="mt-2" />
                 <p className="text-xs text-muted-foreground mt-1">Deduzida da gleba antes dos percentuais de área pública</p>
               </div>
               <div>
                 <Label htmlFor="percentualVerde">Área Verde (%)</Label>
-                <Input
-                  id="percentualVerde"
-                  type="number"
-                  placeholder="15"
-                  value={data.percentualVerde}
-                  onChange={(e) => updateData("percentualVerde", e.target.value)}
-                  className="mt-2"
-                />
+                <Input id="percentualVerde" type="number" placeholder="15" value={data.percentualVerde} onChange={(e) => updateData("percentualVerde", e.target.value)} className="mt-2" />
               </div>
               <div>
                 <Label htmlFor="percentualInstitucional">Área Institucional (%)</Label>
-                <Input
-                  id="percentualInstitucional"
-                  type="number"
-                  placeholder="5"
-                  value={data.percentualInstitucional}
-                  onChange={(e) => updateData("percentualInstitucional", e.target.value)}
-                  className="mt-2"
-                />
+                <Input id="percentualInstitucional" type="number" placeholder="5" value={data.percentualInstitucional} onChange={(e) => updateData("percentualInstitucional", e.target.value)} className="mt-2" />
               </div>
               <div>
                 <Label htmlFor="percentualSistemaViario">Sistema Viário (%)</Label>
-                <Input
-                  id="percentualSistemaViario"
-                  type="number"
-                  placeholder="20"
-                  value={data.percentualSistemaViario}
-                  onChange={(e) => updateData("percentualSistemaViario", e.target.value)}
-                  className="mt-2"
-                />
+                <Input id="percentualSistemaViario" type="number" placeholder="20" value={data.percentualSistemaViario} onChange={(e) => updateData("percentualSistemaViario", e.target.value)} className="mt-2" />
               </div>
             </div>
 
             <div className="pt-2 border-t border-border/40">
               <Label htmlFor="modoLotes">Quantidade de Lotes</Label>
-              <Select value={data.modoLotes} onValueChange={(value) => updateData("modoLotes", value as any)}>
+              <Select value={data.modoLotes} onValueChange={(value) => updateData("modoLotes", value as WizardData["modoLotes"])}>
                 <SelectTrigger id="modoLotes" className="mt-2">
                   <SelectValue />
                 </SelectTrigger>
@@ -430,169 +443,304 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
                 {data.modoLotes === "automatico" ? (
                   <div>
                     <Label htmlFor="areaMediaLoteAlvo">Área Média do Lote-Alvo (m²) *</Label>
-                    <Input
-                      id="areaMediaLoteAlvo"
-                      type="number"
-                      placeholder="250"
-                      value={data.areaMediaLoteAlvo}
-                      onChange={(e) => updateData("areaMediaLoteAlvo", e.target.value)}
-                      className="mt-2"
-                    />
+                    <Input id="areaMediaLoteAlvo" type="number" placeholder="250" value={data.areaMediaLoteAlvo} onChange={(e) => updateData("areaMediaLoteAlvo", e.target.value)} className="mt-2" />
                   </div>
                 ) : (
                   <div>
                     <Label htmlFor="numeroLotesManual">Número de Lotes *</Label>
-                    <Input
-                      id="numeroLotesManual"
-                      type="number"
-                      placeholder="0"
-                      value={data.numeroLotesManual}
-                      onChange={(e) => updateData("numeroLotesManual", e.target.value)}
-                      className="mt-2"
-                    />
+                    <Input id="numeroLotesManual" type="number" placeholder="0" value={data.numeroLotesManual} onChange={(e) => updateData("numeroLotesManual", e.target.value)} className="mt-2" />
                   </div>
                 )}
               </div>
             </div>
           </div>
         );
+
       case "cost":
         return (
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="terraplanagem">Terraplanagem (R$/m²)</Label>
-                <Input
-                  id="terraplanagem"
-                  type="number"
-                  placeholder="0"
-                  value={data.terraplanagem}
-                  onChange={(e) => updateData("terraplanagem", e.target.value)}
-                  className="mt-2"
-                />
+                <Label htmlFor="tipologia">Tipologia *</Label>
+                <Select value={data.tipologia} onValueChange={(value) => updateData("tipologia", value as WizardData["tipologia"])}>
+                  <SelectTrigger id="tipologia" className="mt-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="loteamento_popular">Loteamento Popular</SelectItem>
+                    <SelectItem value="loteamento_aberto">Loteamento Aberto</SelectItem>
+                    <SelectItem value="condominio_fechado">Condomínio Fechado</SelectItem>
+                    <SelectItem value="condominio_chacaras">Condomínio de Chácaras</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">Define preço/absorção padrão e se muro/portaria/lazer entram no orçamento</p>
               </div>
               <div>
-                <Label htmlFor="pavimentacao">Pavimentação (R$/m²)</Label>
-                <Input
-                  id="pavimentacao"
-                  type="number"
-                  placeholder="0"
-                  value={data.pavimentacao}
-                  onChange={(e) => updateData("pavimentacao", e.target.value)}
-                  className="mt-2"
-                />
+                <Label htmlFor="topografia">Topografia *</Label>
+                <Select value={data.topografia} onValueChange={(value) => updateData("topografia", value as WizardData["topografia"])}>
+                  <SelectTrigger id="topografia" className="mt-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="plana">Plana</SelectItem>
+                    <SelectItem value="ondulada">Ondulada</SelectItem>
+                    <SelectItem value="acidentada">Acidentada</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div>
-                <Label htmlFor="agua">Rede de Água (R$/m)</Label>
-                <Input
-                  id="agua"
-                  type="number"
-                  placeholder="0"
-                  value={data.agua}
-                  onChange={(e) => updateData("agua", e.target.value)}
-                  className="mt-2"
-                />
+                <Label htmlFor="padraoPavimentacao">Padrão de Pavimentação *</Label>
+                <Select value={data.padraoPavimentacao} onValueChange={(value) => updateData("padraoPavimentacao", value as WizardData["padraoPavimentacao"])}>
+                  <SelectTrigger id="padraoPavimentacao" className="mt-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="asfalto">Asfalto (TSD/CBUQ)</SelectItem>
+                    <SelectItem value="paver">Paver (Intertravado)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div>
-                <Label htmlFor="esgoto">Rede de Esgoto (R$/m)</Label>
-                <Input
-                  id="esgoto"
-                  type="number"
-                  placeholder="0"
-                  value={data.esgoto}
-                  onChange={(e) => updateData("esgoto", e.target.value)}
-                  className="mt-2"
-                />
+                <Label htmlFor="participacaoEletrica">Participação Financeira Rede Elétrica *</Label>
+                <Select value={data.participacaoEletrica} onValueChange={(value) => updateData("participacaoEletrica", value as WizardData["participacaoEletrica"])}>
+                  <SelectTrigger id="participacaoEletrica" className="mt-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cliente_paga">Cliente paga</SelectItem>
+                    <SelectItem value="concessionaria_cobre">Concessionária cobre</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-border/40 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="solucaoAgua">Solução de Água *</Label>
+                <Select value={data.solucaoAgua} onValueChange={(value) => updateData("solucaoAgua", value as WizardData["solucaoAgua"])}>
+                  <SelectTrigger id="solucaoAgua" className="mt-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="rede_publica">Rede Pública</SelectItem>
+                    <SelectItem value="poco">Poço Artesiano + Reservatório</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {data.solucaoAgua === "poco" && data.tipologia === "condominio_chacaras" && (
+                <div className="flex items-center gap-3 mt-2 md:mt-8">
+                  <Switch checked={data.isChacara} onCheckedChange={(v) => updateData("isChacara", v)} id="isChacara" />
+                  <Label htmlFor="isChacara" className="font-normal">Proprietário executa a ligação domiciliar por conta própria</Label>
+                </div>
+              )}
+              <div>
+                <Label htmlFor="solucaoEsgoto">Solução de Esgoto *</Label>
+                <Select value={data.solucaoEsgoto} onValueChange={(value) => updateData("solucaoEsgoto", value as WizardData["solucaoEsgoto"])}>
+                  <SelectTrigger id="solucaoEsgoto" className="mt-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="rede_publica">Rede Pública</SelectItem>
+                    <SelectItem value="fossa">Fossa Séptica</SelectItem>
+                    <SelectItem value="ete_propria">ETE Própria</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {data.solucaoEsgoto === "rede_publica" && (
+                <div className="flex items-center gap-3 mt-2 md:mt-8">
+                  <Switch checked={data.necessitaElevatoria} onCheckedChange={(v) => updateData("necessitaElevatoria", v)} id="necessitaElevatoria" />
+                  <Label htmlFor="necessitaElevatoria" className="font-normal">Necessita estação elevatória</Label>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-border/40 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="areaSupressaoVegetalM2">Área de Supressão Vegetal (m²)</Label>
+                <Input id="areaSupressaoVegetalM2" type="number" placeholder="0" value={data.areaSupressaoVegetalM2} onChange={(e) => updateData("areaSupressaoVegetalM2", e.target.value)} className="mt-2" />
               </div>
               <div>
-                <Label htmlFor="energia">Energia Elétrica (R$/m)</Label>
-                <Input
-                  id="energia"
-                  type="number"
-                  placeholder="0"
-                  value={data.energia}
-                  onChange={(e) => updateData("energia", e.target.value)}
-                  className="mt-2"
-                />
+                <Label htmlFor="arvoresIsoladasUn">Árvores Isoladas a Suprimir (un)</Label>
+                <Input id="arvoresIsoladasUn" type="number" placeholder="0" value={data.arvoresIsoladasUn} onChange={(e) => updateData("arvoresIsoladasUn", e.target.value)} className="mt-2" />
+              </div>
+              <div>
+                <Label htmlFor="contingenciaPercentual">Contingência sobre a Obra (%)</Label>
+                <Input id="contingenciaPercentual" type="number" placeholder="5" value={data.contingenciaPercentual} onChange={(e) => updateData("contingenciaPercentual", e.target.value)} className="mt-2" />
+              </div>
+              <div>
+                <Label htmlFor="custoFinanceiroPercentual">Custo Financeiro (% s/ infra)</Label>
+                <Input id="custoFinanceiroPercentual" type="number" placeholder="6" value={data.custoFinanceiroPercentual} onChange={(e) => updateData("custoFinanceiroPercentual", e.target.value)} className="mt-2" />
               </div>
             </div>
           </div>
         );
+
       case "sales":
         return (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="vgv">VGV Total (R$) *</Label>
-                <Input
-                  id="vgv"
-                  type="number"
-                  placeholder="0"
-                  value={data.vgv}
-                  onChange={(e) => updateData("vgv", e.target.value)}
-                  className="mt-2"
-                />
+            <div>
+              <Label htmlFor="modoPreco">Preço de Venda</Label>
+              <Select value={data.modoPreco} onValueChange={(value) => updateData("modoPreco", value as WizardData["modoPreco"])}>
+                <SelectTrigger id="modoPreco" className="mt-2">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="automatico">Automático (matriz de tipologia × ágio)</SelectItem>
+                  <SelectItem value="manual">Manual (pesquisa de mercado)</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                {data.modoPreco === "automatico" ? (
+                  <div>
+                    <Label htmlFor="agioPercentual">Ágio / Desconto Regional (%)</Label>
+                    <Input id="agioPercentual" type="number" placeholder="0" value={data.agioPercentual} onChange={(e) => updateData("agioPercentual", e.target.value)} className="mt-2" />
+                  </div>
+                ) : (
+                  <div>
+                    <Label htmlFor="precoManualM2">Preço Manual (R$/m²) *</Label>
+                    <Input id="precoManualM2" type="number" placeholder="0" value={data.precoManualM2} onChange={(e) => updateData("precoManualM2", e.target.value)} className="mt-2" />
+                  </div>
+                )}
               </div>
-              <div>
-                <Label htmlFor="precoMedioM2">Preço Médio (R$/m²)</Label>
-                <Input
-                  id="precoMedioM2"
-                  type="number"
-                  placeholder="0"
-                  value={data.precoMedioM2}
-                  onChange={(e) => updateData("precoMedioM2", e.target.value)}
-                  className="mt-2"
-                />
-              </div>
-              <div>
-                <Label htmlFor="velocidadeVendas">Velocidade de Vendas (un/mês)</Label>
-                <Input
-                  id="velocidadeVendas"
-                  type="number"
-                  placeholder="0"
-                  value={data.velocidadeVendas}
-                  onChange={(e) => updateData("velocidadeVendas", e.target.value)}
-                  className="mt-2"
-                />
+            </div>
+
+            <div className="pt-2 border-t border-border/40">
+              <Label htmlFor="modoAbsorcao">Absorção de Vendas</Label>
+              <Select value={data.modoAbsorcao} onValueChange={(value) => updateData("modoAbsorcao", value as WizardData["modoAbsorcao"])}>
+                <SelectTrigger id="modoAbsorcao" className="mt-2">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="automatico">Automático (velocidade padrão por tipologia)</SelectItem>
+                  <SelectItem value="manual">Manual (lotes/mês)</SelectItem>
+                </SelectContent>
+              </Select>
+              {data.modoAbsorcao === "manual" && (
+                <div className="mt-4">
+                  <Label htmlFor="absorcaoManualLotesMes">Absorção Manual (lotes/mês) *</Label>
+                  <Input id="absorcaoManualLotesMes" type="number" placeholder="0" value={data.absorcaoManualLotesMes} onChange={(e) => updateData("absorcaoManualLotesMes", e.target.value)} className="mt-2" />
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-border/40">
+              <p className="text-sm font-semibold mb-3">Deduções sobre Venda (%)</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="comissaoPercentual">Comissão</Label>
+                  <Input id="comissaoPercentual" type="number" value={data.comissaoPercentual} onChange={(e) => updateData("comissaoPercentual", e.target.value)} className="mt-2" />
+                </div>
+                <div>
+                  <Label htmlFor="marketingPercentual">Marketing</Label>
+                  <Input id="marketingPercentual" type="number" value={data.marketingPercentual} onChange={(e) => updateData("marketingPercentual", e.target.value)} className="mt-2" />
+                </div>
+                <div>
+                  <Label htmlFor="impostosPercentual">Impostos</Label>
+                  <Input id="impostosPercentual" type="number" value={data.impostosPercentual} onChange={(e) => updateData("impostosPercentual", e.target.value)} className="mt-2" />
+                </div>
+                <div>
+                  <Label htmlFor="inadimplenciaPercentual">Inadimplência</Label>
+                  <Input id="inadimplenciaPercentual" type="number" value={data.inadimplenciaPercentual} onChange={(e) => updateData("inadimplenciaPercentual", e.target.value)} className="mt-2" />
+                </div>
+                <div>
+                  <Label htmlFor="despesasAdministrativasPercentual">Despesas Adm.</Label>
+                  <Input id="despesasAdministrativasPercentual" type="number" value={data.despesasAdministrativasPercentual} onChange={(e) => updateData("despesasAdministrativasPercentual", e.target.value)} className="mt-2" />
+                </div>
               </div>
             </div>
           </div>
         );
+
       case "finance":
         return (
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="tmaUtilizada">TMA Utilizada (%) *</Label>
-                <Input
-                  id="tmaUtilizada"
-                  type="number"
-                  placeholder="0"
-                  value={data.tmaUtilizada}
-                  onChange={(e) => updateData("tmaUtilizada", e.target.value)}
-                  className="mt-2"
-                />
+                <Label htmlFor="tmaAnual">TMA — Custo de Capital (% a.a.) *</Label>
+                <Input id="tmaAnual" type="number" placeholder="14" value={data.tmaAnual} onChange={(e) => updateData("tmaAnual", e.target.value)} className="mt-2" />
               </div>
               <div>
-                <Label htmlFor="capitalDisponivel">Capital Disponível (R$)</Label>
-                <Input
-                  id="capitalDisponivel"
-                  type="number"
-                  placeholder="0"
-                  value={data.capitalDisponivel}
-                  onChange={(e) => updateData("capitalDisponivel", e.target.value)}
-                  className="mt-2"
-                />
+                <Label htmlFor="duracaoAprovacoesMeses">Prazo de Aprovações (meses) *</Label>
+                <Input id="duracaoAprovacoesMeses" type="number" placeholder="12" value={data.duracaoAprovacoesMeses} onChange={(e) => updateData("duracaoAprovacoesMeses", e.target.value)} className="mt-2" />
               </div>
+              <div>
+                <Label htmlFor="inicioVendasMes">Início das Vendas (mês) *</Label>
+                <Input id="inicioVendasMes" type="number" placeholder="6" value={data.inicioVendasMes} onChange={(e) => updateData("inicioVendasMes", e.target.value)} className="mt-2" />
+              </div>
+              <div>
+                <Label htmlFor="capexAprovacoesTotal">Custo de Aprovações (R$)</Label>
+                <Input id="capexAprovacoesTotal" type="number" placeholder="0" value={data.capexAprovacoesTotal} onChange={(e) => updateData("capexAprovacoesTotal", e.target.value)} className="mt-2" />
+              </div>
+              <div>
+                <Label htmlFor="curvaVendas">Curva de Vendas</Label>
+                <Select value={data.curvaVendas} onValueChange={(value) => updateData("curvaVendas", value as WizardData["curvaVendas"])}>
+                  <SelectTrigger id="curvaVendas" className="mt-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="constante">Constante</SelectItem>
+                    <SelectItem value="rampa">Rampa</SelectItem>
+                    <SelectItem value="curva_s">Curva S</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="curvaObra">Curva Física de Obra</Label>
+                <Select value={data.curvaObra} onValueChange={(value) => updateData("curvaObra", value as WizardData["curvaObra"])}>
+                  <SelectTrigger id="curvaObra" className="mt-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="linear">Linear</SelectItem>
+                    <SelectItem value="curva_s">Curva S (por disciplina)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="percentualEntrada">Entrada no Ato da Venda (%)</Label>
+                <Input id="percentualEntrada" type="number" placeholder="20" value={data.percentualEntrada} onChange={(e) => updateData("percentualEntrada", e.target.value)} className="mt-2" />
+              </div>
+              <div>
+                <Label htmlFor="numeroParcelas">Número de Parcelas</Label>
+                <Input id="numeroParcelas" type="number" placeholder="120" value={data.numeroParcelas} onChange={(e) => updateData("numeroParcelas", e.target.value)} className="mt-2" />
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-border/40 space-y-3">
+              <div className="flex items-center gap-3">
+                <Switch checked={data.reinvestirCaixaPositivo} onCheckedChange={(v) => updateData("reinvestirCaixaPositivo", v)} id="reinvestirCaixaPositivo" />
+                <Label htmlFor="reinvestirCaixaPositivo" className="font-normal">Reinvestir caixa positivo à TMA mensal</Label>
+              </div>
+              <div className="flex items-center gap-3">
+                <Switch checked={data.custosIndexados} onCheckedChange={(v) => updateData("custosIndexados", v)} id="custosIndexados" />
+                <Label htmlFor="custosIndexados" className="font-normal">Custos indexados (INCC)</Label>
+              </div>
+              {data.custosIndexados && (
+                <div className="max-w-xs">
+                  <Label htmlFor="indiceCustosAnualFracao">Índice de Custos (% a.a.) — deixe em branco para usar o INCC vigente da Configuração</Label>
+                  <Input id="indiceCustosAnualFracao" type="number" placeholder="ex: 6,5" value={data.indiceCustosAnualFracao} onChange={(e) => updateData("indiceCustosAnualFracao", e.target.value)} className="mt-2" />
+                </div>
+              )}
+              <div className="flex items-center gap-3">
+                <Switch checked={data.recebiveisIndexados} onCheckedChange={(v) => updateData("recebiveisIndexados", v)} id="recebiveisIndexados" />
+                <Label htmlFor="recebiveisIndexados" className="font-normal">Recebíveis indexados (IPCA + juros)</Label>
+              </div>
+              {data.recebiveisIndexados && (
+                <div className="max-w-xs">
+                  <Label htmlFor="indiceRecebiveisAnualFracao">Índice de Recebíveis (% a.a.) — deixe em branco para usar o IPCA vigente da Configuração</Label>
+                  <Input id="indiceRecebiveisAnualFracao" type="number" placeholder="ex: 4,5" value={data.indiceRecebiveisAnualFracao} onChange={(e) => updateData("indiceRecebiveisAnualFracao", e.target.value)} className="mt-2" />
+                </div>
+              )}
             </div>
           </div>
         );
+
       case "tax":
         return (
           <div className="space-y-4">
             <div>
               <Label htmlFor="regimeTributario">Regime Tributário *</Label>
-              <Select value={data.regimeTributario} onValueChange={(value) => updateData("regimeTributario", value as any)}>
+              <Select value={data.regimeTributario} onValueChange={(value) => updateData("regimeTributario", value as WizardData["regimeTributario"])}>
                 <SelectTrigger id="regimeTributario" className="mt-2">
                   <SelectValue placeholder="Selecione o regime" />
                 </SelectTrigger>
@@ -602,16 +750,18 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
                   <SelectItem value="lucro_real">Lucro Real (IBS/CBS)</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground mt-2">O TaxEngine ainda não calcula impostos automaticamente — o regime escolhido fica salvo para quando esse motor existir.</p>
             </div>
           </div>
         );
+
       case "review":
         return (
           <div className="space-y-4">
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                Revise todos os dados antes de criar o estudo. Você poderá editá-los depois.
+                Ao confirmar, o GeoEngine, CostEngine, SalesEngine e FinanceEngine rodam de verdade — isso pode levar alguns segundos. Você poderá recalcular depois.
               </AlertDescription>
             </Alert>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -628,12 +778,25 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
                 <p className="font-semibold">{data.location || "-"}</p>
               </div>
               <div>
+                <p className="text-muted-foreground">Área Bruta</p>
+                <p className="font-semibold">{data.areaBruta ? `${data.areaBruta} m²` : "-"}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Tipologia</p>
+                <p className="font-semibold capitalize">{data.tipologia.replace(/_/g, " ")}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">TMA</p>
+                <p className="font-semibold">{data.tmaAnual}% a.a.</p>
+              </div>
+              <div>
                 <p className="text-muted-foreground">Regime Tributário</p>
                 <p className="font-semibold capitalize">{data.regimeTributario.replace(/_/g, " ") || "-"}</p>
               </div>
             </div>
           </div>
         );
+
       default:
         return null;
     }
@@ -659,10 +822,7 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
             <span className={`font-semibold ${isMobile ? "text-xs" : "text-sm"}`}>{STEPS[currentStepIndex].title}</span>
           </div>
           <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-            <div
-              className="bg-primary h-full transition-all duration-300"
-              style={{ width: `${progress}%` }}
-            />
+            <div className="bg-primary h-full transition-all duration-300" style={{ width: `${progress}%` }} />
           </div>
         </div>
 
@@ -672,7 +832,7 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
           {!isMobile && (
             <div className="w-64 border-r border-border/40 bg-muted/30 p-6 overflow-y-auto">
               <div className="space-y-3">
-                {STEPS.map((step, index) => {
+                {STEPS.map((step) => {
                   const isActive = currentStep === step.id;
                   const isCompleted = stepIndex(step.id) < stepIndex(currentStep);
                   return (
@@ -726,46 +886,28 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
           )}
 
           {/* Content Area */}
-          <div className={`flex-1 overflow-y-auto ${isMobile ? "px-4 py-4" : "px-8 py-6"}`}>
-            {renderStepContent()}
-          </div>
+          <div className={`flex-1 overflow-y-auto ${isMobile ? "px-4 py-4" : "px-8 py-6"}`}>{renderStepContent()}</div>
         </div>
 
         {/* Footer Actions */}
         <div className={`border-t border-border/40 bg-background ${isMobile ? "px-4 py-3" : "px-8 py-4"}`}>
           <div className={`flex gap-3 ${isMobile ? "flex-col-reverse" : "justify-end"}`}>
-            <Button
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              className={isMobile ? "w-full" : ""}
-            >
+            <Button variant="outline" onClick={() => onOpenChange(false)} className={isMobile ? "w-full" : ""}>
               Cancelar
             </Button>
             {currentStep !== "info" && (
-              <Button
-                variant="outline"
-                onClick={handlePrevious}
-                className={isMobile ? "w-full" : ""}
-              >
+              <Button variant="outline" onClick={handlePrevious} className={isMobile ? "w-full" : ""}>
                 Anterior
               </Button>
             )}
             {currentStep !== "review" && (
-              <Button
-                onClick={handleNext}
-                disabled={!canAdvance()}
-                className={isMobile ? "w-full" : ""}
-              >
+              <Button onClick={handleNext} disabled={!canAdvance()} className={isMobile ? "w-full" : ""}>
                 Próximo <ChevronRight className="w-4 h-4 ml-2" />
               </Button>
             )}
             {currentStep === "review" && (
-              <Button
-                onClick={handleFinish}
-                disabled={isCreating}
-                className={isMobile ? "w-full" : ""}
-              >
-                {isCreating ? "Criando..." : "Criar Estudo"}
+              <Button onClick={handleFinish} disabled={isCreating} className={isMobile ? "w-full" : ""}>
+                {isCreating ? "Calculando..." : "Criar e Calcular Estudo"}
               </Button>
             )}
           </div>
