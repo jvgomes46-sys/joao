@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -21,6 +21,12 @@ import {
   InsertPartnershipAnalysis,
   approvals,
   InsertApproval,
+  constructionCategories,
+  InsertConstructionCategory,
+  constructionSubcategories,
+  InsertConstructionSubcategory,
+  constructionStages,
+  InsertConstructionStage,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -404,6 +410,122 @@ export async function deleteApproval(id: number, projectId: number) {
   const db = await getDb();
   if (!db) throw new Error("[Database] Cannot delete approval: database not available");
   await db.delete(approvals).where(and(eq(approvals.id, id), eq(approvals.projectId, projectId)));
+}
+
+// Construction tracking (FASE 3 — spec seção 4): EAP de 3 níveis
+// (Categoria → Subcategoria → Etapa). Diferente das *_engine_data, é uma
+// árvore com N linhas por nível, editada individualmente ao longo da obra.
+
+export async function getConstructionTreeByProjectId(projectId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get construction tree: database not available");
+    return [];
+  }
+  const categories = await db
+    .select()
+    .from(constructionCategories)
+    .where(eq(constructionCategories.projectId, projectId));
+  if (categories.length === 0) return [];
+
+  const categoryIds = categories.map((c) => c.id);
+  const subcategories = await db
+    .select()
+    .from(constructionSubcategories)
+    .where(inArray(constructionSubcategories.categoryId, categoryIds));
+  const subcategoryIds = subcategories.map((s) => s.id);
+
+  const stages =
+    subcategoryIds.length > 0
+      ? await db.select().from(constructionStages).where(inArray(constructionStages.subcategoryId, subcategoryIds))
+      : [];
+
+  return categories
+    .sort((a, b) => a.ordem - b.ordem)
+    .map((category) => ({
+      ...category,
+      subcategories: subcategories
+        .filter((s) => s.categoryId === category.id)
+        .sort((a, b) => a.ordem - b.ordem)
+        .map((subcategory) => ({
+          ...subcategory,
+          stages: stages.filter((s) => s.subcategoryId === subcategory.id).sort((a, b) => a.ordem - b.ordem),
+        })),
+    }));
+}
+
+export async function createConstructionCategory(data: InsertConstructionCategory) {
+  const db = await getDb();
+  if (!db) throw new Error("[Database] Cannot create construction category: database not available");
+  const [result] = await db.insert(constructionCategories).values(data);
+  const insertId = (result as { insertId: number }).insertId;
+  const [row] = await db.select().from(constructionCategories).where(eq(constructionCategories.id, insertId)).limit(1);
+  return row;
+}
+
+export async function deleteConstructionCategory(id: number, projectId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("[Database] Cannot delete construction category: database not available");
+  const subcats = await db.select({ id: constructionSubcategories.id }).from(constructionSubcategories).where(eq(constructionSubcategories.categoryId, id));
+  for (const sub of subcats) {
+    await db.delete(constructionStages).where(eq(constructionStages.subcategoryId, sub.id));
+  }
+  await db.delete(constructionSubcategories).where(eq(constructionSubcategories.categoryId, id));
+  await db.delete(constructionCategories).where(and(eq(constructionCategories.id, id), eq(constructionCategories.projectId, projectId)));
+}
+
+export async function createConstructionSubcategory(
+  data: InsertConstructionSubcategory,
+  stages: Omit<InsertConstructionStage, "subcategoryId" | "id">[]
+) {
+  const db = await getDb();
+  if (!db) throw new Error("[Database] Cannot create construction subcategory: database not available");
+  const [result] = await db.insert(constructionSubcategories).values(data);
+  const insertId = (result as { insertId: number }).insertId;
+  if (stages.length > 0) {
+    await db.insert(constructionStages).values(stages.map((s) => ({ ...s, subcategoryId: insertId })));
+  }
+  const [row] = await db.select().from(constructionSubcategories).where(eq(constructionSubcategories.id, insertId)).limit(1);
+  return row;
+}
+
+export async function deleteConstructionSubcategory(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("[Database] Cannot delete construction subcategory: database not available");
+  await db.delete(constructionStages).where(eq(constructionStages.subcategoryId, id));
+  await db.delete(constructionSubcategories).where(eq(constructionSubcategories.id, id));
+}
+
+export async function updateConstructionStage(
+  id: number,
+  data: Partial<Omit<InsertConstructionStage, "subcategoryId" | "id">>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("[Database] Cannot update construction stage: database not available");
+  await db.update(constructionStages).set(data).where(eq(constructionStages.id, id));
+  const [row] = await db.select().from(constructionStages).where(eq(constructionStages.id, id)).limit(1);
+  return row;
+}
+
+export async function getConstructionStageById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select().from(constructionStages).where(eq(constructionStages.id, id)).limit(1);
+  return row;
+}
+
+export async function getConstructionSubcategoryById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select().from(constructionSubcategories).where(eq(constructionSubcategories.id, id)).limit(1);
+  return row;
+}
+
+export async function getConstructionCategoryById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select().from(constructionCategories).where(eq(constructionCategories.id, id)).limit(1);
+  return row;
 }
 
 // TODO: add feature queries here as your schema grows.

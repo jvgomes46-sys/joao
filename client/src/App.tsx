@@ -9,6 +9,7 @@ import Home from "./pages/Home";
 import Projects from "./pages/Projects";
 import Dashboard from "./pages/Dashboard";
 import Approvals from "./pages/Approvals";
+import Construction from "./pages/Construction";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -28,6 +29,11 @@ function Router() {
       <Route path="/projetos/:id/aprovacoes">
         <DashboardLayout>
           <Approvals />
+        </DashboardLayout>
+      </Route>
+      <Route path="/projetos/:id/obra">
+        <DashboardLayout>
+          <Construction />
         </DashboardLayout>
       </Route>
       <Route path="/404" component={NotFound} />

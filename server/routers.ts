@@ -30,6 +30,17 @@ import { runScenarioEngine } from "./services/scenarioEngineService";
 import { getDashboardData } from "./services/dashboardService";
 import { seedApprovalsForProject, listApprovals } from "./services/approvalsService";
 import { createApproval, deleteApproval, updateApproval } from "./db";
+import {
+  createCategory,
+  createSubcategoryFromCostEngine,
+  createSubcategoryManual,
+  getConstructionDashboard,
+  getConstructionTree,
+  removeCategory,
+  removeSubcategory,
+  updateStage,
+} from "./services/constructionService";
+import { STAGE_TEMPLATES } from "./engines/constructionEngine";
 import { TRPCError } from "@trpc/server";
 
 /** Garante que o projeto existe e pertence ao usuário antes de ler/gravar dados de um motor. */
@@ -545,6 +556,128 @@ export const appRouter = router({
         await requireOwnedProject(input.projectId, ctx.user.id);
         await deleteApproval(input.id, input.projectId);
         return { success: true };
+      }),
+  }),
+
+  construction: router({
+    stageTemplates: protectedProcedure.query(() => STAGE_TEMPLATES),
+
+    getTree: protectedProcedure
+      .input(z.object({ projectId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        try {
+          return await getConstructionTree(input.projectId, ctx.user.id);
+        } catch (error) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: error instanceof Error ? error.message : "Falha ao carregar a EAP da obra",
+          });
+        }
+      }),
+
+    getDashboard: protectedProcedure
+      .input(z.object({ projectId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        try {
+          return await getConstructionDashboard(input.projectId, ctx.user.id);
+        } catch (error) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: error instanceof Error ? error.message : "Falha ao montar o dashboard de obra",
+          });
+        }
+      }),
+
+    createCategory: protectedProcedure
+      .input(z.object({ projectId: z.number(), nome: z.string().min(1), ordem: z.number().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await createCategory(input.projectId, ctx.user.id, input.nome, input.ordem);
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Falha ao criar categoria" });
+        }
+      }),
+
+    deleteCategory: protectedProcedure
+      .input(z.object({ categoryId: z.number(), projectId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          await removeCategory(input.categoryId, input.projectId, ctx.user.id);
+          return { success: true };
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Falha ao remover categoria" });
+        }
+      }),
+
+    createSubcategoryManual: protectedProcedure
+      .input(
+        z.object({
+          categoryId: z.number(),
+          projectId: z.number(),
+          nome: z.string().min(1),
+          templateKey: z.string().min(1),
+          valorPrevistoTotal: z.number().min(0),
+          ordem: z.number().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { categoryId, projectId, ...rest } = input;
+        try {
+          return await createSubcategoryManual(categoryId, projectId, ctx.user.id, rest);
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Falha ao criar subcategoria" });
+        }
+      }),
+
+    createSubcategoryFromCostEngine: protectedProcedure
+      .input(
+        z.object({
+          categoryId: z.number(),
+          projectId: z.number(),
+          nome: z.string().min(1),
+          templateKey: z.string().min(1),
+          grupo: z.string().min(1),
+          ordem: z.number().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { categoryId, projectId, ...rest } = input;
+        try {
+          return await createSubcategoryFromCostEngine(categoryId, projectId, ctx.user.id, rest);
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Falha ao criar subcategoria a partir do CostEngine" });
+        }
+      }),
+
+    deleteSubcategory: protectedProcedure
+      .input(z.object({ subcategoryId: z.number(), projectId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          await removeSubcategory(input.subcategoryId, input.projectId, ctx.user.id);
+          return { success: true };
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Falha ao remover subcategoria" });
+        }
+      }),
+
+    updateStage: protectedProcedure
+      .input(
+        z.object({
+          stageId: z.number(),
+          projectId: z.number(),
+          percentualExecutado: z.number().min(0).max(100).optional(),
+          pesoPercentual: z.number().min(0).max(100).optional(),
+          status: z.enum(["nao_iniciado", "em_execucao", "concluido"]).optional(),
+          observacoes: z.string().nullable().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { stageId, projectId, ...rest } = input;
+        try {
+          return await updateStage(stageId, projectId, ctx.user.id, rest);
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Falha ao atualizar etapa" });
+        }
       }),
   }),
 

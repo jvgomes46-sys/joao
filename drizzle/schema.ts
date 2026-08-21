@@ -244,6 +244,60 @@ export type Approval = typeof approvals.$inferSelect;
 export type InsertApproval = typeof approvals.$inferInsert;
 
 // ============================================================================
+// FASE 3 — Execução de Obra / Acompanhamento (spec seção 4)
+//
+// EAP (Estrutura Analítica de Projeto): Categoria Geral → Subcategoria →
+// Etapa. Conceitualmente independente do Estudo de Viabilidade (Fase 1) —
+// conecta-se pelo projectId e, quando aplicável, puxa o "Valor Previsto" do
+// orçamento parametrizado do CostEngine em vez de ser redigitado do zero
+// (ver constructionService.createSubcategoryFromCostEngine).
+// ============================================================================
+
+export const constructionCategories = mysqlTable("construction_categories", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId").notNull(), // Foreign key to projects
+  nome: varchar("nome", { length: 255 }).notNull(), // ex: "Áreas Construídas", "Infraestrutura"
+  ordem: int("ordem").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ConstructionCategory = typeof constructionCategories.$inferSelect;
+export type InsertConstructionCategory = typeof constructionCategories.$inferInsert;
+
+export const constructionSubcategories = mysqlTable("construction_subcategories", {
+  id: int("id").autoincrement().primaryKey(),
+  categoryId: int("categoryId").notNull(), // Foreign key to construction_categories
+  nome: varchar("nome", { length: 255 }).notNull(), // ex: "Vestiário", "Complexo Esportivo"
+  templateKey: varchar("templateKey", { length: 100 }).notNull(), // chave do template de etapas usado (ver STAGE_TEMPLATES)
+  origemCostEngineGrupo: varchar("origemCostEngineGrupo", { length: 100 }), // se o valor previsto veio de um grupo do CostEngine, qual foi
+  ordem: int("ordem").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ConstructionSubcategory = typeof constructionSubcategories.$inferSelect;
+export type InsertConstructionSubcategory = typeof constructionSubcategories.$inferInsert;
+
+export const constructionStages = mysqlTable("construction_stages", {
+  id: int("id").autoincrement().primaryKey(),
+  subcategoryId: int("subcategoryId").notNull(), // Foreign key to construction_subcategories
+  nome: varchar("nome", { length: 255 }).notNull(), // ex: "Fundação", "Terraplanagem"
+  ordem: int("ordem").default(0).notNull(),
+  pesoPercentual: decimal("pesoPercentual", { precision: 8, scale: 4 }).default("0").notNull(), // peso da etapa (%) sobre o total geral da obra — editável/informativo
+  valorPrevisto: decimal("valorPrevisto", { precision: 15, scale: 2 }).default("0").notNull(), // R$
+  percentualPrevisto: decimal("percentualPrevisto", { precision: 6, scale: 2 }).default("100").notNull(), // normalmente 100%, mas pode ser parcial se a etapa está fatiada em contratos
+  percentualExecutado: decimal("percentualExecutado", { precision: 6, scale: 2 }).default("0").notNull(), // input manual, periódico — dado que a equipe de campo alimenta
+  status: mysqlEnum("status", ["nao_iniciado", "em_execucao", "concluido"]).default("nao_iniciado").notNull(),
+  observacoes: text("observacoes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ConstructionStage = typeof constructionStages.$inferSelect;
+export type InsertConstructionStage = typeof constructionStages.$inferInsert;
+
+// ============================================================================
 // MÓDULO DE CONFIGURAÇÃO (camada administrativa global — spec seção 5)
 //
 // Nenhuma variável de referência vive dentro de um Estudo. Todo Estudo LÊ
