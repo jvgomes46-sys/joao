@@ -15,6 +15,13 @@
       "when": 1784123459844,
       "tag": "0001_youthful_dazzler",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1787314314122,
+      "tag": "0002_wonderful_ultimatum",
+      "breakpoints": true
     }
   ]
 }

@@ -190,3 +190,190 @@ export const scenarios = mysqlTable("scenarios", {
 
 export type Scenario = typeof scenarios.$inferSelect;
 export type InsertScenario = typeof scenarios.$inferInsert;
+
+// ============================================================================
+// MÓDULO DE CONFIGURAÇÃO (camada administrativa global — spec seção 5)
+//
+// Nenhuma variável de referência vive dentro de um Estudo. Todo Estudo LÊ
+// destas tabelas; a gravação/edição é restrita a administradores. Cada
+// cálculo de Estudo grava um snapshot (ver `configSnapshots`) dos valores
+// efetivamente usados, para auditabilidade (seção 5.3).
+// ============================================================================
+
+/**
+ * A. Biblioteca de Legislação Municipal/Regional (seção 5.1-A)
+ * Uma entrada por município (ou país, no caso do Paraguai). Se o projeto
+ * estiver em local não cadastrado, o sistema cai no piso federal
+ * (Lei 6.766/79) com alerta explícito de "não verificado localmente".
+ */
+export const configLegislation = mysqlTable("config_legislation", {
+  id: int("id").autoincrement().primaryKey(),
+  municipio: varchar("municipio", { length: 255 }).notNull(), // ou nome do país, ex: "Paraguai"
+  uf: varchar("uf", { length: 8 }), // null para jurisdições fora do Brasil
+  pais: varchar("pais", { length: 100 }).default("Brasil").notNull(),
+  percentualAreaVerdeMin: decimal("percentualAreaVerdeMin", { precision: 5, scale: 2 }), // piso local (pode ser > 15% federal)
+  percentualAreaInstitucionalMin: decimal("percentualAreaInstitucionalMin", { precision: 5, scale: 2 }),
+  percentualSistemaViarioMin: decimal("percentualSistemaViarioMin", { precision: 5, scale: 2 }),
+  areaMinimaLote: decimal("areaMinimaLote", { precision: 10, scale: 2 }), // m², piso federal = 125
+  frenteMinimaLote: decimal("frenteMinimaLote", { precision: 8, scale: 2 }), // m, piso federal = 5
+  faixaNonAedificandi: decimal("faixaNonAedificandi", { precision: 8, scale: 2 }), // m, piso federal = 15
+  prazoExecucaoObrasMeses: int("prazoExecucaoObrasMeses"), // piso federal = 48 (prorrogável +48)
+  regrasArborizacao: json("regrasArborizacao"), // JSON: autorização por árvore, proporção de compensação
+  fonte: text("fonte"), // link do plano diretor / lei
+  dataUltimaVerificacao: timestamp("dataUltimaVerificacao"),
+  isFederalFallback: boolean("isFederalFallback").default(false).notNull(), // true = linha "piso federal" usada quando município não cadastrado
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ConfigLegislation = typeof configLegislation.$inferSelect;
+export type InsertConfigLegislation = typeof configLegislation.$inferInsert;
+
+/**
+ * B. Biblioteca de Custos Unitários (base SINAPI/regional) — seção 5.1-B
+ * Versionado: nunca faz UPDATE de valor, sempre INSERT de nova versão.
+ * O valor "vigente" é o de maior `dataBase` para o mesmo (grupo, itemCodigo, regiao).
+ */
+export const configUnitCosts = mysqlTable("config_unit_costs", {
+  id: int("id").autoincrement().primaryKey(),
+  grupo: mysqlEnum("grupo", [
+    "terraplenagem",
+    "drenagem",
+    "pavimentacao",
+    "agua",
+    "esgoto",
+    "energia",
+    "obras_civis_condominio",
+    "servicos_complementares",
+  ]).notNull(),
+  itemCodigo: varchar("itemCodigo", { length: 64 }).notNull(), // chave estável do item (ex: "rede_distribuicao_agua")
+  itemDescricao: varchar("itemDescricao", { length: 255 }).notNull(),
+  unidade: varchar("unidade", { length: 16 }).notNull(), // m2, m, un, m3, vb
+  valorUnitario: decimal("valorUnitario", { precision: 14, scale: 4 }).notNull(),
+  regiao: varchar("regiao", { length: 100 }).notNull(), // estado/região de referência do preço
+  dataBase: timestamp("dataBase").notNull(), // data-base do preço (ex: referência SINAPI do mês)
+  fonte: varchar("fonte", { length: 255 }), // ex: "SINAPI 08/2026 - GO não desonerado"
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ConfigUnitCost = typeof configUnitCosts.$inferSelect;
+export type InsertConfigUnitCost = typeof configUnitCosts.$inferInsert;
+
+/**
+ * BDI e outros parâmetros globais do CostEngine — parametrizável, não fixo em 25%.
+ * Mesma lógica de versionamento por dataBase que configUnitCosts.
+ */
+export const configCostParameters = mysqlTable("config_cost_parameters", {
+  id: int("id").autoincrement().primaryKey(),
+  chave: varchar("chave", { length: 64 }).notNull(), // ex: "bdi_infraestrutura"
+  valor: decimal("valor", { precision: 8, scale: 4 }).notNull(), // percentual ou fator
+  regiao: varchar("regiao", { length: 100 }).default("Nacional").notNull(),
+  dataBase: timestamp("dataBase").notNull(),
+  fonte: varchar("fonte", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ConfigCostParameter = typeof configCostParameters.$inferSelect;
+export type InsertConfigCostParameter = typeof configCostParameters.$inferInsert;
+
+/**
+ * C. Índices Financeiros (seção 5.1-C): INCC, IPCA, taxa de câmbio.
+ * `origem` distingue atualização automática (API do Bacen/IBGE) de override manual.
+ */
+export const configFinancialIndices = mysqlTable("config_financial_indices", {
+  id: int("id").autoincrement().primaryKey(),
+  indice: mysqlEnum("indice", ["incc", "ipca", "cambio_usd", "cambio_gs"]).notNull(),
+  valor: decimal("valor", { precision: 12, scale: 6 }).notNull(), // % a.a. para índices; cotação para câmbio
+  dataReferencia: timestamp("dataReferencia").notNull(),
+  origem: mysqlEnum("origem", ["automatico", "manual"]).default("manual").notNull(),
+  fonte: varchar("fonte", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ConfigFinancialIndex = typeof configFinancialIndices.$inferSelect;
+export type InsertConfigFinancialIndex = typeof configFinancialIndices.$inferInsert;
+
+/**
+ * D. Matriz de Tipologia (seção 5.1-D): preço base R$/m² por tipologia,
+ * velocidade de absorção padrão, flags de muro/portaria/lazer.
+ */
+export const configTypologyMatrix = mysqlTable("config_typology_matrix", {
+  id: int("id").autoincrement().primaryKey(),
+  tipologia: mysqlEnum("tipologia", [
+    "loteamento_popular",
+    "loteamento_aberto",
+    "condominio_fechado",
+    "condominio_chacaras",
+  ]).notNull(),
+  precoBaseM2: decimal("precoBaseM2", { precision: 12, scale: 2 }).notNull(),
+  velocidadeAbsorcaoPadrao: decimal("velocidadeAbsorcaoPadrao", { precision: 8, scale: 2 }), // lotes/mês
+  temMuro: boolean("temMuro").default(false).notNull(),
+  temPortaria: boolean("temPortaria").default(false).notNull(),
+  temAreaLazer: boolean("temAreaLazer").default(false).notNull(),
+  regiao: varchar("regiao", { length: 100 }).default("Nacional").notNull(),
+  dataBase: timestamp("dataBase").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ConfigTypologyMatrix = typeof configTypologyMatrix.$inferSelect;
+export type InsertConfigTypologyMatrix = typeof configTypologyMatrix.$inferInsert;
+
+/**
+ * E. Prazos Padrão (seção 5.1-E): prazo de obra por faixa de porte da gleba,
+ * e prazo de aprovação (base + adicionais condicionais).
+ */
+export const configStandardTimelines = mysqlTable("config_standard_timelines", {
+  id: int("id").autoincrement().primaryKey(),
+  tipo: mysqlEnum("tipo", ["prazo_obra_por_porte", "prazo_aprovacao_base", "prazo_aprovacao_adicional"]).notNull(),
+  // Para prazo_obra_por_porte: faixa de área da gleba (m²) que este prazo cobre
+  faixaPorteMin: decimal("faixaPorteMin", { precision: 12, scale: 2 }),
+  faixaPorteMax: decimal("faixaPorteMax", { precision: 12, scale: 2 }),
+  // Para prazo_aprovacao_adicional: gatilho que soma meses ao prazo base
+  // (ex: "ete_propria" +6, "supressao_vegetal" +6, "condominio_fechado" +3)
+  gatilho: varchar("gatilho", { length: 64 }),
+  prazoMeses: int("prazoMeses").notNull(),
+  regiao: varchar("regiao", { length: 100 }).default("Nacional").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ConfigStandardTimeline = typeof configStandardTimelines.$inferSelect;
+export type InsertConfigStandardTimeline = typeof configStandardTimelines.$inferInsert;
+
+/**
+ * F. Regimes Tributários por Jurisdição (seção 5.1-F).
+ * `pais` permite suportar Brasil e Paraguai (Cambyretá) sem hardcode.
+ */
+export const configTaxRegimes = mysqlTable("config_tax_regimes", {
+  id: int("id").autoincrement().primaryKey(),
+  pais: varchar("pais", { length: 100 }).notNull(),
+  regime: varchar("regime", { length: 64 }).notNull(), // ex: "ret", "lucro_presumido", "lucro_real", "iva_py"
+  descricao: varchar("descricao", { length: 255 }),
+  aliquotas: json("aliquotas").notNull(), // JSON flexível: { irpj, csll, pis, cofins, ibs, cbs, iva, ... }
+  ativo: boolean("ativo").default(true).notNull(),
+  dataBase: timestamp("dataBase").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ConfigTaxRegime = typeof configTaxRegimes.$inferSelect;
+export type InsertConfigTaxRegime = typeof configTaxRegimes.$inferInsert;
+
+/**
+ * Snapshot de Configuração por Estudo (seção 5.3) — CRÍTICO PARA AUDITABILIDADE.
+ * Cada vez que um motor de cálculo roda para um projeto, grava-se uma cópia
+ * imutável dos valores de configuração efetivamente usados. Estudos antigos
+ * NUNCA mudam de resultado por causa de uma atualização posterior na
+ * Configuração global — só um recálculo explícito ("recalcular com valores
+ * atuais") gera um novo snapshot.
+ */
+export const configSnapshots = mysqlTable("config_snapshots", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId").notNull(), // Foreign key to projects
+  engine: mysqlEnum("engine", ["geo_engine", "cost_engine", "sales_engine", "finance_engine", "tax_engine", "full"]).notNull(),
+  snapshotData: json("snapshotData").notNull(), // cópia completa dos valores de configuração usados neste cálculo
+  overrides: json("overrides"), // overrides pontuais feitos neste estudo específico (ex: "BDI 22% em vez de 25%")
+  calculatedAt: timestamp("calculatedAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ConfigSnapshot = typeof configSnapshots.$inferSelect;
+export type InsertConfigSnapshot = typeof configSnapshots.$inferInsert;
