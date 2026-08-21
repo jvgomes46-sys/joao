@@ -150,7 +150,11 @@ function ConfigTablePanel({ table }: { table: ConfigTableName }) {
                 <TableRow key={row.id as number}>
                   {columns.map((c) => (
                     <TableCell key={c} className="text-xs whitespace-nowrap max-w-[220px] truncate">
-                      {typeof row[c] === "object" ? JSON.stringify(row[c]) : String(row[c] ?? "")}
+                      {row[c] === null || row[c] === undefined
+                        ? ""
+                        : typeof row[c] === "object"
+                          ? JSON.stringify(row[c])
+                          : String(row[c])}
                     </TableCell>
                   ))}
                   <TableCell className="text-right whitespace-nowrap">

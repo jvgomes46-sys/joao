@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -205,6 +205,10 @@ function StageRow({ stage, projectId }: { stage: any; projectId: number }) {
   const utils = trpc.useUtils();
   const [percentual, setPercentual] = useState(String(stage.percentualExecutado));
 
+  useEffect(() => {
+    setPercentual(String(stage.percentualExecutado));
+  }, [stage.percentualExecutado]);
+
   const mutation = trpc.construction.updateStage.useMutation({
     onSuccess: () => {
       utils.construction.getTree.invalidate({ projectId });
@@ -227,6 +231,7 @@ function StageRow({ stage, projectId }: { stage: any; projectId: number }) {
         onChange={(e) => setPercentual(e.target.value)}
         onBlur={() => {
           const value = Math.min(100, Math.max(0, Number(percentual) || 0));
+          setPercentual(String(value));
           if (value !== stage.percentualExecutado) {
             mutation.mutate({
               stageId: stage.id,

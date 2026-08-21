@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -57,6 +57,17 @@ function ApprovalRow({ approval, projectId }: { approval: Approval; projectId: n
 
   const [observacao, setObservacao] = useState(approval.observacao ?? "");
   const [responsavel, setResponsavel] = useState(approval.responsavel ?? "");
+
+  // Re-sync local drafts whenever the server value changes (e.g. a refetch
+  // triggered by another field, or another user editing the same project) —
+  // otherwise a stale local value can silently overwrite a value someone
+  // else just saved the next time this input loses focus.
+  useEffect(() => {
+    setObservacao(approval.observacao ?? "");
+  }, [approval.observacao]);
+  useEffect(() => {
+    setResponsavel(approval.responsavel ?? "");
+  }, [approval.responsavel]);
 
   return (
     <div className="border rounded-lg p-3 space-y-2">
@@ -168,7 +179,14 @@ export default function Approvals() {
       list.push(a);
       map.set(a.grupo, list);
     });
-    return GRUPO_ORDER.filter((g) => map.has(g)).map((g) => ({ grupo: g, items: map.get(g)! }));
+    const known = GRUPO_ORDER.filter((g) => map.has(g)).map((g) => ({ grupo: g, items: map.get(g)! }));
+    // Grupos fora dos 5 esperados (ex.: criados manualmente com um valor livre)
+    // ainda precisam aparecer — do contrário ficam contados no progresso geral
+    // mas invisíveis/não editáveis nesta tela.
+    const unknown = Array.from(map.keys())
+      .filter((g) => !GRUPO_ORDER.includes(g))
+      .map((g) => ({ grupo: g, items: map.get(g)! }));
+    return [...known, ...unknown];
   }, [approvals]);
 
   const progresso = useMemo(() => {
