@@ -54,12 +54,14 @@ async function main() {
   });
 
   // --- BDI padrão ---
+  // Valor real calibrado a partir do orçamento "Residencial Mirante"
+  // (Formosa/GO): todo item usa BDI 1 = 20% (ex.: 307,26 × 1,20 = 368,712).
   await db.insert(configCostParameters).values({
     chave: "bdi_infraestrutura",
-    valor: "25.0000",
+    valor: "20.0000",
     regiao: "Nacional",
     dataBase: now,
-    fonte: "Padrão de mercado para infraestrutura de loteamento (spec seção 2.4)",
+    fonte: "Orçamento de Implantação — Residencial Mirante (Formosa/GO), coluna 'BDI 1' aplicada uniformemente em todos os itens",
   });
 
   // --- D. Matriz de Tipologia ---
@@ -131,59 +133,66 @@ async function main() {
   ]);
 
   // --- B. Custos Unitários (base SINAPI) — CostEngine (seção 2.4) ---
-  // TODO(confirmar): valores placeholder de referência de mercado — substituir
-  // pela base SINAPI real (região/data-base) antes de usar em produção.
+  // Valores marcados "SINAPI [código] — Residencial Mirante" vêm do
+  // orçamento real de implantação (Formosa/GO, base SINAPI GO, sem BDI —
+  // BDI é aplicado separadamente via config_cost_parameters). Valores sem
+  // essa fonte continuam TODO(confirmar) — o orçamento real não cobre
+  // todo item do CostEngine (ex.: poço, reservatório, fossa, ETE — o
+  // projeto de referência usa rede pública/concessionária, não solução
+  // autônoma).
   const regiao = "Nacional";
   const unitCostRows: (typeof configUnitCosts.$inferInsert)[] = [
     // Terraplenagem
-    { grupo: "terraplenagem", itemCodigo: "limpeza_destocamento", itemDescricao: "Limpeza e destocamento", unidade: "m2", valorUnitario: "3.20", regiao, dataBase: now },
-    { grupo: "terraplenagem", itemCodigo: "regularizacao", itemDescricao: "Regularização do terreno", unidade: "m2", valorUnitario: "2.10", regiao, dataBase: now },
-    { grupo: "terraplenagem", itemCodigo: "corte_aterro", itemDescricao: "Corte/aterro", unidade: "m3", valorUnitario: "18.50", regiao, dataBase: now },
-    { grupo: "terraplenagem", itemCodigo: "supressao_vegetal", itemDescricao: "Supressão vegetal", unidade: "m2", valorUnitario: "4.80", regiao, dataBase: now },
+    { grupo: "terraplenagem", itemCodigo: "limpeza_destocamento", itemDescricao: "Limpeza e destocamento", unidade: "m2", valorUnitario: "0.30", regiao, dataBase: now, fonte: "SINAPI cotação — Residencial Mirante (Formosa/GO): raspagem e limpeza de vegetação" },
+    { grupo: "terraplenagem", itemCodigo: "regularizacao", itemDescricao: "Regularização do terreno", unidade: "m2", valorUnitario: "1.16", regiao, dataBase: now, fonte: "SINAPI 100577 — Residencial Mirante: regularização/compactação de subleito" },
+    { grupo: "terraplenagem", itemCodigo: "corte_aterro", itemDescricao: "Corte/aterro", unidade: "m3", valorUnitario: "2.03", regiao, dataBase: now, fonte: "SINAPI 101116 — Residencial Mirante: escavação horizontal em solo 1ª categoria (não inclui transporte a distância)" },
+    { grupo: "terraplenagem", itemCodigo: "supressao_vegetal", itemDescricao: "Supressão vegetal", unidade: "m2", valorUnitario: "4.80", regiao, dataBase: now, fonte: "TODO(confirmar) — não presente no orçamento de referência" },
     // Drenagem
-    { grupo: "drenagem", itemCodigo: "drenagem_galeria", itemDescricao: "Galeria de águas pluviais", unidade: "m", valorUnitario: "320.00", regiao, dataBase: now },
-    { grupo: "drenagem", itemCodigo: "drenagem_valeta", itemDescricao: "Valeta de drenagem", unidade: "m", valorUnitario: "85.00", regiao, dataBase: now },
-    { grupo: "drenagem", itemCodigo: "bocas_de_lobo", itemDescricao: "Bocas de lobo", unidade: "un", valorUnitario: "1450.00", regiao, dataBase: now },
-    { grupo: "drenagem", itemCodigo: "pvs_drenagem", itemDescricao: "Poços de visita de drenagem", unidade: "un", valorUnitario: "1800.00", regiao, dataBase: now },
-    { grupo: "drenagem", itemCodigo: "sarjeta_meio_fio", itemDescricao: "Sarjeta e meio-fio", unidade: "m", valorUnitario: "65.00", regiao, dataBase: now },
+    { grupo: "drenagem", itemCodigo: "drenagem_galeria", itemDescricao: "Galeria de águas pluviais", unidade: "m", valorUnitario: "123.14", regiao, dataBase: now, fonte: "SINAPI 95568 — Residencial Mirante: tubo de concreto DN 400mm" },
+    { grupo: "drenagem", itemCodigo: "drenagem_valeta", itemDescricao: "Valeta de drenagem", unidade: "m", valorUnitario: "85.00", regiao, dataBase: now, fonte: "TODO(confirmar) — não presente no orçamento de referência (usa apenas galeria)" },
+    { grupo: "drenagem", itemCodigo: "bocas_de_lobo", itemDescricao: "Bocas de lobo", unidade: "un", valorUnitario: "1425.29", regiao, dataBase: now, fonte: "SINAPI 97956 — Residencial Mirante: caixa para boca de lobo" },
+    { grupo: "drenagem", itemCodigo: "pvs_drenagem", itemDescricao: "Poços de visita de drenagem", unidade: "un", valorUnitario: "3838.20", regiao, dataBase: now, fonte: "SINAPI 99259+98114 — Residencial Mirante: base do PV (3133,61) + tampão de ferro fundido (704,59)" },
+    { grupo: "drenagem", itemCodigo: "sarjeta_meio_fio", itemDescricao: "Sarjeta e meio-fio", unidade: "m", valorUnitario: "94.23", regiao, dataBase: now, fonte: "SINAPI 94273+94281 — Residencial Mirante: guia/meio-fio trecho reto (46,80) + sarjeta trecho reto (47,43)" },
     // Pavimentação e Calçadas
-    { grupo: "pavimentacao", itemCodigo: "pavimentacao_base_padrao", itemDescricao: "Base do pavimento (padrão)", unidade: "m2", valorUnitario: "42.00", regiao, dataBase: now },
-    { grupo: "pavimentacao", itemCodigo: "pavimentacao_base_simplificada", itemDescricao: "Base do pavimento (simplificada)", unidade: "m2", valorUnitario: "28.00", regiao, dataBase: now },
-    { grupo: "pavimentacao", itemCodigo: "pavimentacao_capa_asfalto", itemDescricao: "Capa asfáltica (TSD/CBUQ)", unidade: "m2", valorUnitario: "55.00", regiao, dataBase: now },
-    { grupo: "pavimentacao", itemCodigo: "pavimentacao_capa_paver", itemDescricao: "Capa em paver intertravado", unidade: "m2", valorUnitario: "68.00", regiao, dataBase: now },
-    { grupo: "pavimentacao", itemCodigo: "calcadas", itemDescricao: "Calçadas", unidade: "m2", valorUnitario: "38.00", regiao, dataBase: now },
+    { grupo: "pavimentacao", itemCodigo: "pavimentacao_base_padrao", itemDescricao: "Base do pavimento (padrão)", unidade: "m2", valorUnitario: "26.71", regiao, dataBase: now, fonte: "SINAPI 96396 — Residencial Mirante: base brita graduada R$178,04/m³ × 0,15m de espessura" },
+    { grupo: "pavimentacao", itemCodigo: "pavimentacao_base_simplificada", itemDescricao: "Base do pavimento (simplificada)", unidade: "m2", valorUnitario: "28.00", regiao, dataBase: now, fonte: "TODO(confirmar) — orçamento de referência não distingue base simplificada" },
+    { grupo: "pavimentacao", itemCodigo: "pavimentacao_capa_asfalto", itemDescricao: "Capa asfáltica (TSD/CBUQ)", unidade: "m2", valorUnitario: "59.60", regiao, dataBase: now, fonte: "SINAPI 95995+104375 — Residencial Mirante: CBUQ R$1436,29/m³ × 0,04m (57,45) + imprimação (2,15)" },
+    { grupo: "pavimentacao", itemCodigo: "pavimentacao_capa_paver", itemDescricao: "Capa em paver intertravado", unidade: "m2", valorUnitario: "68.00", regiao, dataBase: now, fonte: "TODO(confirmar) — orçamento de referência usa apenas asfalto" },
+    { grupo: "pavimentacao", itemCodigo: "calcadas", itemDescricao: "Calçadas", unidade: "m2", valorUnitario: "38.00", regiao, dataBase: now, fonte: "TODO(confirmar) — não presente no orçamento de referência" },
     // Água
-    { grupo: "agua", itemCodigo: "rede_distribuicao_agua", itemDescricao: "Rede de distribuição de água", unidade: "m", valorUnitario: "95.00", regiao, dataBase: now },
-    { grupo: "agua", itemCodigo: "ligacao_domiciliar_agua", itemDescricao: "Ligação domiciliar de água", unidade: "un", valorUnitario: "650.00", regiao, dataBase: now },
-    { grupo: "agua", itemCodigo: "poco_tubular", itemDescricao: "Poço tubular profundo", unidade: "vb", valorUnitario: "45000.00", regiao, dataBase: now },
-    { grupo: "agua", itemCodigo: "reservatorio", itemDescricao: "Reservatório", unidade: "m3", valorUnitario: "2200.00", regiao, dataBase: now },
-    { grupo: "agua", itemCodigo: "casa_de_bombas", itemDescricao: "Casa de bombas", unidade: "un", valorUnitario: "18000.00", regiao, dataBase: now },
-    { grupo: "agua", itemCodigo: "interligacao_rede_agua", itemDescricao: "Interligação à rede pública de água", unidade: "vb", valorUnitario: "35000.00", regiao, dataBase: now },
-    // Esgoto
-    { grupo: "esgoto", itemCodigo: "rede_coletora_esgoto", itemDescricao: "Rede coletora de esgoto", unidade: "m", valorUnitario: "110.00", regiao, dataBase: now },
-    { grupo: "esgoto", itemCodigo: "pvs_esgoto", itemDescricao: "Poços de visita de esgoto", unidade: "un", valorUnitario: "1900.00", regiao, dataBase: now },
-    { grupo: "esgoto", itemCodigo: "ligacoes_esgoto", itemDescricao: "Ligações domiciliares de esgoto", unidade: "un", valorUnitario: "580.00", regiao, dataBase: now },
-    { grupo: "esgoto", itemCodigo: "fossa_sumidouro", itemDescricao: "Fossa séptica + sumidouro", unidade: "un", valorUnitario: "4200.00", regiao, dataBase: now },
-    { grupo: "esgoto", itemCodigo: "emissario", itemDescricao: "Emissário", unidade: "m", valorUnitario: "130.00", regiao, dataBase: now },
-    { grupo: "esgoto", itemCodigo: "elevatoria_esgoto", itemDescricao: "Estação elevatória de esgoto", unidade: "vb", valorUnitario: "180000.00", regiao, dataBase: now },
-    { grupo: "esgoto", itemCodigo: "ete_compacta", itemDescricao: "ETE compacta (por lote)", unidade: "un", valorUnitario: "3800.00", regiao, dataBase: now },
+    { grupo: "agua", itemCodigo: "rede_distribuicao_agua", itemDescricao: "Rede de distribuição de água", unidade: "m", valorUnitario: "52.16", regiao, dataBase: now, fonte: "SINAPI 89451 — Residencial Mirante: tubo PVC soldável DN 75mm" },
+    { grupo: "agua", itemCodigo: "ligacao_domiciliar_agua", itemDescricao: "Ligação domiciliar de água", unidade: "un", valorUnitario: "650.00", regiao, dataBase: now, fonte: "TODO(confirmar) — não detalhado por lote no orçamento de referência" },
+    { grupo: "agua", itemCodigo: "poco_tubular", itemDescricao: "Poço tubular profundo", unidade: "vb", valorUnitario: "45000.00", regiao, dataBase: now, fonte: "TODO(confirmar) — projeto de referência usa rede pública, não poço" },
+    { grupo: "agua", itemCodigo: "reservatorio", itemDescricao: "Reservatório", unidade: "m3", valorUnitario: "2200.00", regiao, dataBase: now, fonte: "TODO(confirmar) — não presente no orçamento de referência" },
+    { grupo: "agua", itemCodigo: "casa_de_bombas", itemDescricao: "Casa de bombas", unidade: "un", valorUnitario: "18000.00", regiao, dataBase: now, fonte: "TODO(confirmar) — não presente no orçamento de referência" },
+    { grupo: "agua", itemCodigo: "interligacao_rede_agua", itemDescricao: "Interligação à rede pública de água", unidade: "vb", valorUnitario: "24876.36", regiao, dataBase: now, fonte: "SINAPI cotação — Residencial Mirante: válvula redutora de pressão + caixa em alvenaria" },
+    // Esgoto — projeto de referência trata como verba única (R$1.057.658,00
+    // por cotação, sem detalhamento por rede/PV/ligação); mantidos os
+    // valores anteriores para os itens individuais.
+    { grupo: "esgoto", itemCodigo: "rede_coletora_esgoto", itemDescricao: "Rede coletora de esgoto", unidade: "m", valorUnitario: "110.00", regiao, dataBase: now, fonte: "TODO(confirmar) — orçamento de referência trata esgoto como verba única" },
+    { grupo: "esgoto", itemCodigo: "pvs_esgoto", itemDescricao: "Poços de visita de esgoto", unidade: "un", valorUnitario: "1900.00", regiao, dataBase: now, fonte: "TODO(confirmar) — orçamento de referência trata esgoto como verba única" },
+    { grupo: "esgoto", itemCodigo: "ligacoes_esgoto", itemDescricao: "Ligações domiciliares de esgoto", unidade: "un", valorUnitario: "580.00", regiao, dataBase: now, fonte: "TODO(confirmar) — orçamento de referência trata esgoto como verba única" },
+    { grupo: "esgoto", itemCodigo: "fossa_sumidouro", itemDescricao: "Fossa séptica + sumidouro", unidade: "un", valorUnitario: "4200.00", regiao, dataBase: now, fonte: "TODO(confirmar) — projeto de referência usa rede pública, não fossa" },
+    { grupo: "esgoto", itemCodigo: "emissario", itemDescricao: "Emissário", unidade: "m", valorUnitario: "130.00", regiao, dataBase: now, fonte: "TODO(confirmar) — orçamento de referência trata esgoto como verba única" },
+    { grupo: "esgoto", itemCodigo: "elevatoria_esgoto", itemDescricao: "Estação elevatória de esgoto", unidade: "vb", valorUnitario: "180000.00", regiao, dataBase: now, fonte: "TODO(confirmar) — orçamento de referência trata esgoto como verba única" },
+    { grupo: "esgoto", itemCodigo: "ete_compacta", itemDescricao: "ETE compacta (por lote)", unidade: "un", valorUnitario: "3800.00", regiao, dataBase: now, fonte: "TODO(confirmar) — projeto de referência usa rede pública, não ETE própria" },
     // Energia
-    { grupo: "energia", itemCodigo: "rede_aerea_energia", itemDescricao: "Rede aérea de energia", unidade: "m", valorUnitario: "78.00", regiao, dataBase: now },
-    { grupo: "energia", itemCodigo: "postes_energia", itemDescricao: "Postes de energia", unidade: "un", valorUnitario: "2100.00", regiao, dataBase: now },
-    { grupo: "energia", itemCodigo: "transformadores", itemDescricao: "Transformadores", unidade: "un", valorUnitario: "22000.00", regiao, dataBase: now },
-    { grupo: "energia", itemCodigo: "iluminacao_publica", itemDescricao: "Iluminação pública", unidade: "un", valorUnitario: "1600.00", regiao, dataBase: now },
-    { grupo: "energia", itemCodigo: "entrada_por_lote", itemDescricao: "Entrada de energia por lote", unidade: "un", valorUnitario: "480.00", regiao, dataBase: now },
-    { grupo: "energia", itemCodigo: "obra_conexao_externa_energia", itemDescricao: "Obra de conexão externa à rede", unidade: "vb", valorUnitario: "120000.00", regiao, dataBase: now },
+    { grupo: "energia", itemCodigo: "rede_aerea_energia", itemDescricao: "Rede aérea de energia", unidade: "m", valorUnitario: "64.97", regiao, dataBase: now, fonte: "SINAPI 101565 — Residencial Mirante: cabo de cobre flexível 70mm² para rede aérea BT" },
+    { grupo: "energia", itemCodigo: "postes_energia", itemDescricao: "Postes de energia", unidade: "un", valorUnitario: "1078.23", regiao, dataBase: now, fonte: "SINAPI 100599+41196 — Residencial Mirante: assentamento (473,49) + poste concreto duplo T 9m (604,74)" },
+    { grupo: "energia", itemCodigo: "transformadores", itemDescricao: "Transformadores", unidade: "un", valorUnitario: "15570.55", regiao, dataBase: now, fonte: "SINAPI 102104+102109 — Residencial Mirante: transformador 75kVA (15503,19) + suporte em poste (67,36)" },
+    { grupo: "energia", itemCodigo: "iluminacao_publica", itemDescricao: "Iluminação pública", unidade: "un", valorUnitario: "1600.00", regiao, dataBase: now, fonte: "TODO(confirmar) — não detalhado separadamente no orçamento de referência" },
+    { grupo: "energia", itemCodigo: "entrada_por_lote", itemDescricao: "Entrada de energia por lote", unidade: "un", valorUnitario: "480.00", regiao, dataBase: now, fonte: "TODO(confirmar) — não detalhado por lote no orçamento de referência" },
+    { grupo: "energia", itemCodigo: "obra_conexao_externa_energia", itemDescricao: "Obra de conexão externa à rede", unidade: "vb", valorUnitario: "120000.00", regiao, dataBase: now, fonte: "TODO(confirmar) — não presente no orçamento de referência" },
     // Obras Civis — Condomínio Fechado
-    { grupo: "obras_civis_condominio", itemCodigo: "muro_condominio", itemDescricao: "Muro de fechamento", unidade: "m", valorUnitario: "310.00", regiao, dataBase: now },
-    { grupo: "obras_civis_condominio", itemCodigo: "portaria", itemDescricao: "Portaria", unidade: "un", valorUnitario: "95000.00", regiao, dataBase: now },
-    { grupo: "obras_civis_condominio", itemCodigo: "area_lazer", itemDescricao: "Área de lazer/clube", unidade: "vb", valorUnitario: "350000.00", regiao, dataBase: now },
+    { grupo: "obras_civis_condominio", itemCodigo: "muro_condominio", itemDescricao: "Muro de fechamento", unidade: "m", valorUnitario: "626.10", regiao, dataBase: now, fonte: "Cotação — Residencial Mirante: muro em bloco cerâmico rebocado e pintado" },
+    { grupo: "obras_civis_condominio", itemCodigo: "portaria", itemDescricao: "Portaria", unidade: "un", valorUnitario: "788897.26", regiao, dataBase: now, fonte: "Cotação — Residencial Mirante: guarita/administração do condomínio, 451m² × R$1749,26/m²" },
+    { grupo: "obras_civis_condominio", itemCodigo: "area_lazer", itemDescricao: "Área de lazer/clube", unidade: "vb", valorUnitario: "1827040.64", regiao, dataBase: now, fonte: "Cotação — Residencial Mirante: soma de quadra poliesportiva, quadra de areia, salão de festas, paisagismo, quadra de tênis, squash, mirante/wine bar, playground, quiosques, espaço pet, academia, área gourmet, fire place, praças e heliponto" },
     // Serviços Complementares
-    { grupo: "servicos_complementares", itemCodigo: "sinalizacao_viaria", itemDescricao: "Sinalização viária", unidade: "m", valorUnitario: "12.00", regiao, dataBase: now },
-    { grupo: "servicos_complementares", itemCodigo: "paisagismo", itemDescricao: "Paisagismo (área verde)", unidade: "m2", valorUnitario: "25.00", regiao, dataBase: now },
-    { grupo: "servicos_complementares", itemCodigo: "projetos_executivos", itemDescricao: "Projetos executivos", unidade: "vb", valorUnitario: "85000.00", regiao, dataBase: now },
-    { grupo: "servicos_complementares", itemCodigo: "corte_arvores_isoladas", itemDescricao: "Corte de árvores isoladas", unidade: "un", valorUnitario: "350.00", regiao, dataBase: now },
-    { grupo: "servicos_complementares", itemCodigo: "compensacao_arvores_isoladas", itemDescricao: "Compensação por árvore isolada", unidade: "un", valorUnitario: "600.00", regiao, dataBase: now },
+    { grupo: "servicos_complementares", itemCodigo: "sinalizacao_viaria", itemDescricao: "Sinalização viária", unidade: "m", valorUnitario: "12.00", regiao, dataBase: now, fonte: "TODO(confirmar) — orçamento de referência dá total do grupo (R$24.481,47), não unitário por m de via" },
+    { grupo: "servicos_complementares", itemCodigo: "paisagismo", itemDescricao: "Paisagismo (área verde)", unidade: "m2", valorUnitario: "25.00", regiao, dataBase: now, fonte: "TODO(confirmar) — orçamento de referência dá verba única (R$215.478,00), não unitário por m²" },
+    { grupo: "servicos_complementares", itemCodigo: "projetos_executivos", itemDescricao: "Projetos executivos", unidade: "vb", valorUnitario: "85000.00", regiao, dataBase: now, fonte: "TODO(confirmar) — orçamento de referência é de obra, não cobre projetos" },
+    { grupo: "servicos_complementares", itemCodigo: "corte_arvores_isoladas", itemDescricao: "Corte de árvores isoladas", unidade: "un", valorUnitario: "350.00", regiao, dataBase: now, fonte: "TODO(confirmar) — não presente no orçamento de referência" },
+    { grupo: "servicos_complementares", itemCodigo: "compensacao_arvores_isoladas", itemDescricao: "Compensação por árvore isolada", unidade: "un", valorUnitario: "600.00", regiao, dataBase: now, fonte: "TODO(confirmar) — não presente no orçamento de referência" },
   ];
   await db.insert(configUnitCosts).values(unitCostRows);
 

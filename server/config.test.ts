@@ -23,7 +23,7 @@ describe("Módulo de Configuração", () => {
 
   it("lê o BDI padrão configurado", async () => {
     const bdi = await getCostParameter("bdi_infraestrutura");
-    expect(Number(bdi.valor)).toBe(25);
+    expect(Number(bdi.valor)).toBe(20); // calibrado a partir do orçamento real Residencial Mirante (Formosa/GO)
   });
 
   it("lê a matriz de tipologia com flags de condomínio corretas", async () => {

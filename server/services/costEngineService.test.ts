@@ -81,7 +81,7 @@ describe("CostEngineService — integração com GeoEngine e Módulo de Configur
     const snapshot = await getLatestConfigSnapshot(projectId, "cost_engine");
     expect(snapshot).toBeDefined();
     const snapshotData = snapshot!.snapshotData as { bdiPercentual: number; custosUnitarios: Record<string, number> };
-    expect(snapshotData.bdiPercentual).toBe(25);
+    expect(snapshotData.bdiPercentual).toBe(20); // calibrado a partir do orçamento real Residencial Mirante (Formosa/GO)
     expect(snapshotData.custosUnitarios["limpeza_destocamento"]).toBeGreaterThan(0);
   });
 
