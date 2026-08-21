@@ -57,6 +57,21 @@ describe("FinanceEngine — validado contra a Planilha Mestre de Viabilidade rea
       obras_civis_condominio: 0,
     },
     capexTotal: 11697718.9523, // Orçamento!$F$63
+
+    // Fixa as janelas ORIGINAIS da Planilha Mestre de Viabilidade
+    // explicitamente — o default de JANELAS_OBRA_PADRAO foi recalibrado com
+    // dados de outro projeto real (Residencial Mirante) e não deve
+    // silenciosamente mudar o resultado deste teste de paridade.
+    janelasObraPorDisciplina: {
+      terraplenagem: { inicio: 0, fim: 0.25 },
+      drenagem: { inicio: 0.1, fim: 0.4 },
+      agua: { inicio: 0.25, fim: 0.55 },
+      energia: { inicio: 0.35, fim: 0.7 },
+      pavimentacao: { inicio: 0.5, fim: 0.85 },
+      servicos_complementares: { inicio: 0.85, fim: 1 },
+      esgoto: { inicio: 0.2, fim: 0.55 },
+      obras_civis_condominio: { inicio: 0.3, fim: 0.95 },
+    },
   });
 
   it("totais do fluxo batem com a planilha (receita bruta, deduções, receita líquida, aprovações)", () => {

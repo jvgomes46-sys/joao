@@ -12,16 +12,28 @@ export type CurvaObra = "linear" | "curva_s";
 
 export const HORIZONTE_PADRAO_MESES = 120;
 
-/** Janelas padrão (% do prazo de obra) por disciplina — mesmos valores da planilha mestre. */
+/**
+ * Janelas padrão (% do prazo de obra) por disciplina.
+ *
+ * Calibradas a partir do cronograma REAL do orçamento "Residencial Mirante"
+ * (Formosa/GO) — aba CRONOGRAMA, datas de início/fim de cada etapa
+ * normalizadas sobre a duração total da obra (31/03/2026 a 31/12/2027,
+ * 640 dias). "energia" e "esgoto" usam a janela de "REDE DE DISTRIBUIÇÃO
+ * URBANÍSTICA"/"REDE DE ESGOTO SANITÁRIO" respectivamente, já que o
+ * cronograma de referência não separa energia da rede geral. Substituem os
+ * valores anteriores, que vinham de suposições genéricas da Planilha Mestre
+ * de Viabilidade (mantidos explicitamente no teste de fixture que valida
+ * contra aquele cenário — ver `financeEngine.spreadsheet.test.ts`).
+ */
 export const JANELAS_OBRA_PADRAO: Record<string, { inicio: number; fim: number }> = {
-  terraplenagem: { inicio: 0, fim: 0.25 },
-  drenagem: { inicio: 0.1, fim: 0.4 },
-  agua: { inicio: 0.25, fim: 0.55 },
-  energia: { inicio: 0.35, fim: 0.7 },
-  pavimentacao: { inicio: 0.5, fim: 0.85 },
-  servicos_complementares: { inicio: 0.85, fim: 1 },
-  esgoto: { inicio: 0.2, fim: 0.55 },
-  obras_civis_condominio: { inicio: 0.3, fim: 0.95 },
+  terraplenagem: { inicio: 0.07, fim: 0.21 },
+  drenagem: { inicio: 0.04, fim: 0.32 },
+  agua: { inicio: 0.2, fim: 0.38 },
+  energia: { inicio: 0.24, fim: 0.38 },
+  pavimentacao: { inicio: 0.2, fim: 0.48 },
+  servicos_complementares: { inicio: 0.48, fim: 0.76 },
+  esgoto: { inicio: 0.24, fim: 0.38 },
+  obras_civis_condominio: { inicio: 0.11, fim: 1.0 },
 };
 
 export interface FinanceEngineInput {
@@ -59,6 +71,9 @@ export interface FinanceEngineInput {
   curvaObra: CurvaObra;
   gruposCustoObra: Partial<Record<string, number>>; // totais por grupo do CostEngine (sem aprovações), chaves de JANELAS_OBRA_PADRAO
   capexTotal: number; // CAPEX total (para indicadores e alerta de exposição/CAPEX)
+
+  /** Override das janelas por disciplina — se omitido, usa JANELAS_OBRA_PADRAO (calibrado com dados reais). */
+  janelasObraPorDisciplina?: Record<string, { inicio: number; fim: number }>;
 }
 
 export interface FinanceMonthRow {
@@ -128,7 +143,8 @@ function custoObraNoMes(
   duracaoObra: number,
   curva: CurvaObra,
   custoObraMensalLinear: number,
-  gruposCustoObra: Partial<Record<string, number>>
+  gruposCustoObra: Partial<Record<string, number>>,
+  janelasObraPorDisciplina: Record<string, { inicio: number; fim: number }>
 ): number {
   if (curva === "linear") {
     return mes >= inicioObra && mes < inicioObra + duracaoObra ? custoObraMensalLinear : 0;
@@ -137,7 +153,7 @@ function custoObraNoMes(
   let total = 0;
   for (const [grupo, valorTotal] of Object.entries(gruposCustoObra)) {
     if (!valorTotal) continue;
-    const janela = JANELAS_OBRA_PADRAO[grupo];
+    const janela = janelasObraPorDisciplina[grupo];
     if (!janela) continue;
     const mesInicio = Math.round(inicioObra + janela.inicio * duracaoObra);
     const mesFim = Math.round(inicioObra + janela.fim * duracaoObra);
@@ -236,7 +252,15 @@ export function calcularFinanceEngine(input: FinanceEngineInput): FinanceEngineO
         ? -custoAprovacoesMensalBase * fatorCustos
         : 0;
 
-    const custoObraBase = custoObraNoMes(mes, inicioObra, input.duracaoObraMeses, input.curvaObra, custoObraMensalLinear, input.gruposCustoObra);
+    const custoObraBase = custoObraNoMes(
+      mes,
+      inicioObra,
+      input.duracaoObraMeses,
+      input.curvaObra,
+      custoObraMensalLinear,
+      input.gruposCustoObra,
+      input.janelasObraPorDisciplina ?? JANELAS_OBRA_PADRAO
+    );
     const custoObra = -custoObraBase * fatorCustos;
 
     const jurosReinvestimento = input.reinvestirCaixaPositivo && fluxoAcumuladoAnterior > 0 ? fluxoAcumuladoAnterior * tmaMensal : 0;
