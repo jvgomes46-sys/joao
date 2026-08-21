@@ -11,7 +11,7 @@ import { AlertCircle, CheckCircle2, ChevronRight, Building2, Hammer, TrendingUp,
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useIsMobile } from "@/hooks/useMobile";
 
 type Step = "info" | "geo" | "cost" | "sales" | "finance" | "tax" | "review";
@@ -163,6 +163,10 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
   const [currentStep, setCurrentStep] = useState<Step>("info");
   const [data, setData] = useState<WizardData>(WIZARD_DATA_DEFAULTS);
   const [isSaving, setIsSaving] = useState(false);
+  // Se um estudo anterior falhou no meio do cálculo (ex.: CostEngine rejeitou
+  // um input), o projeto já foi criado — reaproveita o mesmo id ao tentar de
+  // novo, em vez de criar um segundo projeto órfão a cada retry.
+  const createdProjectIdRef = useRef<number | null>(null);
 
   const createProjectMutation = trpc.projects.create.useMutation();
   const calculateGeoEngineMutation = trpc.geoEngine.calculate.useMutation();
@@ -175,71 +179,61 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
   const currentStepIndex = STEPS.findIndex((s) => s.id === currentStep);
   const progress = ((currentStepIndex + 1) / STEPS.length) * 100;
 
-  const validateCurrentStep = (): boolean => {
+  /**
+   * Validação pura (sem efeito colateral) usada para habilitar/desabilitar o
+   * botão "Próximo" — NUNCA chamar direto no JSX de uma função que dispara
+   * toast, porque o React re-executa o render (e portanto essa checagem) a
+   * cada keystroke, o que faria o toast de erro repetir a cada digitação.
+   */
+  const getStepValidationError = (): string | null => {
     switch (currentStep) {
       case "info":
-        if (!data.name.trim()) {
-          toast.error("Preencha o nome do empreendimento");
-          return false;
-        }
-        if (!data.type) {
-          toast.error("Selecione o tipo de empreendimento");
-          return false;
-        }
-        return true;
+        if (!data.name.trim()) return "Preencha o nome do empreendimento";
+        if (!data.type) return "Selecione o tipo de empreendimento";
+        return null;
       case "geo":
-        if (!data.areaBruta || Number(data.areaBruta) <= 0) {
-          toast.error("Preencha a área bruta");
-          return false;
-        }
+        if (!data.areaBruta || Number(data.areaBruta) <= 0) return "Preencha a área bruta";
         if (data.modoLotes === "automatico" && (!data.areaMediaLoteAlvo || Number(data.areaMediaLoteAlvo) <= 0)) {
-          toast.error("Preencha a área média do lote-alvo (modo automático)");
-          return false;
+          return "Preencha a área média do lote-alvo (modo automático)";
         }
         if (data.modoLotes === "manual" && (!data.numeroLotesManual || Number(data.numeroLotesManual) <= 0)) {
-          toast.error("Preencha o número de lotes (modo manual)");
-          return false;
+          return "Preencha o número de lotes (modo manual)";
         }
-        return true;
+        return null;
       case "cost":
-        if (data.solucaoEsgoto === "rede_publica" && data.necessitaElevatoria === undefined) {
-          toast.error("Informe se o projeto necessita de estação elevatória");
-          return false;
-        }
-        return true;
+        return null;
       case "sales":
         if (data.modoPreco === "manual" && (!data.precoManualM2 || Number(data.precoManualM2) <= 0)) {
-          toast.error("Preencha o preço manual (R$/m²)");
-          return false;
+          return "Preencha o preço manual (R$/m²)";
         }
         if (data.modoAbsorcao === "manual" && (!data.absorcaoManualLotesMes || Number(data.absorcaoManualLotesMes) <= 0)) {
-          toast.error("Preencha a absorção manual (lotes/mês)");
-          return false;
+          return "Preencha a absorção manual (lotes/mês)";
         }
-        return true;
+        return null;
       case "finance":
-        if (!data.tmaAnual || Number(data.tmaAnual) <= 0) {
-          toast.error("Preencha a Taxa Mínima de Atratividade (% a.a.)");
-          return false;
-        }
+        if (!data.tmaAnual || Number(data.tmaAnual) <= 0) return "Preencha a Taxa Mínima de Atratividade (% a.a.)";
         if (!data.duracaoAprovacoesMeses || Number(data.duracaoAprovacoesMeses) <= 0) {
-          toast.error("Preencha a duração das aprovações (meses)");
-          return false;
+          return "Preencha a duração das aprovações (meses)";
         }
-        if (!data.inicioVendasMes || Number(data.inicioVendasMes) <= 0) {
-          toast.error("Preencha o mês de início das vendas");
-          return false;
-        }
-        return true;
+        if (!data.inicioVendasMes || Number(data.inicioVendasMes) <= 0) return "Preencha o mês de início das vendas";
+        return null;
       case "tax":
-        if (!data.regimeTributario) {
-          toast.error("Selecione o regime tributário");
-          return false;
-        }
-        return true;
+        if (!data.regimeTributario) return "Selecione o regime tributário";
+        return null;
       default:
-        return true;
+        return null;
     }
+  };
+
+  const isStepValid = (): boolean => getStepValidationError() === null;
+
+  const validateCurrentStep = (): boolean => {
+    const error = getStepValidationError();
+    if (error) {
+      toast.error(error);
+      return false;
+    }
+    return true;
   };
 
   const handleNext = () => {
@@ -263,13 +257,20 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
 
     setIsSaving(true);
     try {
-      const project = await createProjectMutation.mutateAsync({
-        name: data.name,
-        description: data.description,
-        type: data.type,
-        location: data.location,
-      });
-      if (!project) throw new Error("Falha ao criar o projeto");
+      let project: { id: number } | undefined;
+      if (createdProjectIdRef.current !== null) {
+        project = { id: createdProjectIdRef.current };
+      } else {
+        const created = await createProjectMutation.mutateAsync({
+          name: data.name,
+          description: data.description,
+          type: data.type,
+          location: data.location,
+        });
+        if (!created) throw new Error("Falha ao criar o projeto");
+        createdProjectIdRef.current = created.id;
+        project = created;
+      }
 
       // 1) GeoEngine — área, lotes, densidade. Todo o resto depende disto.
       await calculateGeoEngineMutation.mutateAsync({
@@ -355,6 +356,7 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
       }
 
       toast.success("Estudo de viabilidade criado e calculado com sucesso!");
+      createdProjectIdRef.current = null;
       onOpenChange(false);
       onSuccess?.();
       setData(WIZARD_DATA_DEFAULTS);
@@ -371,7 +373,7 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
   };
 
   const stepIndex = (id: Step) => STEPS.findIndex((s) => s.id === id);
-  const canAdvance = () => validateCurrentStep();
+  const canAdvance = () => isStepValid();
   const isCreating = isSaving;
 
   const renderStepContent = () => {
@@ -821,8 +823,22 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
     }
   };
 
+  // Fecha o modal (Cancelar, clique fora, Esc) — o wizard nunca desmonta
+  // (fica sempre no DOM em Projects.tsx com open=false), então sem isto os
+  // dados e a etapa ficavam presos do fechamento anterior na próxima abertura.
+  // Não reseta enquanto uma criação está em andamento (isSaving) — deixa o
+  // handleFinish decidir o que fazer com o resultado dela.
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && !isSaving) {
+      setData(WIZARD_DATA_DEFAULTS);
+      setCurrentStep("info");
+      createdProjectIdRef.current = null;
+    }
+    onOpenChange(nextOpen);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className={`${isMobile ? "max-w-full h-screen rounded-none" : "max-w-4xl"} max-h-[95vh] overflow-hidden flex flex-col p-0`}>
         {/* Header */}
         <div className={`bg-gradient-to-r from-primary/5 to-secondary/5 border-b border-border/40 ${isMobile ? "px-4 py-4" : "px-8 py-6"}`}>
@@ -911,7 +927,7 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
         {/* Footer Actions */}
         <div className={`border-t border-border/40 bg-background ${isMobile ? "px-4 py-3" : "px-8 py-4"}`}>
           <div className={`flex gap-3 ${isMobile ? "flex-col-reverse" : "justify-end"}`}>
-            <Button variant="outline" onClick={() => onOpenChange(false)} className={isMobile ? "w-full" : ""}>
+            <Button variant="outline" onClick={() => handleOpenChange(false)} className={isMobile ? "w-full" : ""}>
               Cancelar
             </Button>
             {currentStep !== "info" && (
