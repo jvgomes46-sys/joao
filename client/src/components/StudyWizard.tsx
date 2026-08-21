@@ -76,6 +76,7 @@ interface WizardData {
 
   // TaxEngine (ainda não é motor de cálculo — só gravação simples)
   regimeTributario: "ret" | "lucro_presumido" | "lucro_real" | "";
+  patrimonioAfetacao: boolean;
 }
 
 const WIZARD_DATA_DEFAULTS: WizardData = {
@@ -132,6 +133,7 @@ const WIZARD_DATA_DEFAULTS: WizardData = {
   curvaObra: "curva_s",
 
   regimeTributario: "",
+  patrimonioAfetacao: true,
 };
 
 /** Campos que a UI mostra como percentual "0 a 100" mas a API espera como fração "0 a 1". */
@@ -167,7 +169,7 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
   const calculateCostEngineMutation = trpc.costEngine.calculate.useMutation();
   const calculateSalesEngineMutation = trpc.salesEngine.calculate.useMutation();
   const calculateFinanceEngineMutation = trpc.financeEngine.calculate.useMutation();
-  const saveTaxEngineMutation = trpc.taxEngine.save.useMutation();
+  const calculateTaxEngineMutation = trpc.taxEngine.calculate.useMutation();
 
   const currentStepIndex = STEPS.findIndex((s) => s.id === currentStep);
   const progress = ((currentStepIndex + 1) / STEPS.length) * 100;
@@ -337,12 +339,13 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
         curvaObra: data.curvaObra,
       });
 
-      // TaxEngine ainda não existe como motor de cálculo (spec Etapa 9+) —
-      // grava só o regime escolhido, sem descartar o dado.
+      // 5) TaxEngine — impostos sobre a receita real (SalesEngine) e o lucro
+      // real (FinanceEngine) que os motores anteriores acabaram de calcular.
       if (data.regimeTributario) {
-        await saveTaxEngineMutation.mutateAsync({
+        await calculateTaxEngineMutation.mutateAsync({
           projectId: project.id,
-          regimeTributario: data.regimeTributario,
+          regime: data.regimeTributario,
+          patrimonioAfetacao: data.patrimonioAfetacao,
         });
       }
 
@@ -750,8 +753,19 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
                   <SelectItem value="lucro_real">Lucro Real (IBS/CBS)</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground mt-2">O TaxEngine ainda não calcula impostos automaticamente — o regime escolhido fica salvo para quando esse motor existir.</p>
             </div>
+            {data.regimeTributario === "ret" && (
+              <div className="flex items-center gap-3">
+                <Switch checked={data.patrimonioAfetacao} onCheckedChange={(v) => updateData("patrimonioAfetacao", v)} id="patrimonioAfetacao" />
+                <Label htmlFor="patrimonioAfetacao" className="font-normal">Projeto possui patrimônio de afetação</Label>
+              </div>
+            )}
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                O cálculo de impostos é uma modelagem simplificada e educativa — confira sempre com o contador do projeto antes de decidir, especialmente pela transição da reforma tributária (IBS/CBS).
+              </AlertDescription>
+            </Alert>
           </div>
         );
 

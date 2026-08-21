@@ -23,6 +23,7 @@ import { runGeoEngine } from "./services/geoEngineService";
 import { runCostEngine } from "./services/costEngineService";
 import { runFinanceEngine } from "./services/financeEngineService";
 import { runSalesEngine } from "./services/salesEngineService";
+import { runTaxEngine } from "./services/taxEngineService";
 import { TRPCError } from "@trpc/server";
 
 /** Garante que o projeto existe e pertence ao usuário antes de ler/gravar dados de um motor. */
@@ -169,12 +170,10 @@ export const appRouter = router({
       }),
   }),
 
-  // SalesEngine, FinanceEngine e TaxEngine ainda não existem como motores de
-  // cálculo (spec Etapa 7 em diante) — estas rotas apenas persistem os dados
-  // brutos coletados pelo StudyWizard nas tabelas já existentes no schema,
-  // em vez de descartá-los como acontecia antes. CostEngine já é um motor
-  // real (ver `calculate` abaixo); `save` continua disponível como gravação
-  // manual/override simples, sem rodar a lógica condicional completa.
+  // CostEngine, SalesEngine, FinanceEngine e TaxEngine já são motores reais
+  // (ver `calculate` em cada router abaixo); `save` continua disponível em
+  // cada um como gravação manual/override simples, sem rodar a lógica
+  // condicional completa.
   costEngine: router({
     getByProjectId: protectedProcedure
       .input(z.object({ projectId: z.number() }))
@@ -384,6 +383,28 @@ export const appRouter = router({
         await requireOwnedProject(input.projectId, ctx.user.id);
         const { projectId, ...rest } = input;
         return await upsertTaxEngineData(projectId, rest);
+      }),
+
+    calculate: protectedProcedure
+      .input(
+        z.object({
+          projectId: z.number(),
+          regime: z.enum(["ret", "lucro_presumido", "lucro_real"]),
+          redutorSocialReais: z.number().min(0).optional(),
+          patrimonioAfetacao: z.boolean().optional(),
+          pais: z.string().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { projectId, ...taxInput } = input;
+        try {
+          return await runTaxEngine(projectId, ctx.user.id, taxInput);
+        } catch (error) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: error instanceof Error ? error.message : "Falha ao calcular TaxEngine",
+          });
+        }
       }),
   }),
 });

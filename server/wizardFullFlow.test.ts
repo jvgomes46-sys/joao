@@ -9,7 +9,7 @@ import type { TrpcContext } from "./_core/context";
  * Simula EXATAMENTE a sequência de chamadas que o StudyWizard faz em
  * handleFinish (client/src/components/StudyWizard.tsx) — projects.create,
  * geoEngine.calculate, costEngine.calculate, salesEngine.calculate,
- * financeEngine.calculate, taxEngine.save — usando os MESMOS valores
+ * financeEngine.calculate, taxEngine.calculate — usando os MESMOS valores
  * padrão do WIZARD_DATA_DEFAULTS, para provar que o wizard reconectado
  * aos motores reais realmente funciona de ponta a ponta.
  */
@@ -137,8 +137,9 @@ describe("StudyWizard reconectado — fluxo completo Geo → Cost → Sales → 
     });
     expect(financeOutput.fluxoMensal).toHaveLength(120);
 
-    // 6) tax — gravação simples
-    await caller.taxEngine.save({ projectId, regimeTributario: "ret" });
+    // 6) tax — impostos sobre a receita/lucro reais que os motores anteriores calcularam
+    const taxOutput = await caller.taxEngine.calculate({ projectId, regime: "ret", patrimonioAfetacao: true });
+    expect(taxOutput.impostosTotais).toBeGreaterThan(0);
 
     // Confirma que TUDO foi persistido e é lido de volta — o wizard reconectado
     // não deixa nenhum motor "mudo" (só gravando dados brutos sem calcular).
