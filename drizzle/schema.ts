@@ -214,6 +214,35 @@ export const partnershipAnalysis = mysqlTable("partnership_analysis", {
 export type PartnershipAnalysis = typeof partnershipAnalysis.$inferSelect;
 export type InsertPartnershipAnalysis = typeof partnershipAnalysis.$inferInsert;
 
+/**
+ * FASE 2 — Aprovação/Licenciamento (spec seção 3): checklist de acompanhamento
+ * por órgão/concessionária, com status e prazo. Semeado automaticamente pelos
+ * itens do checklist GRAPROHAB (geoEngine) e dos 4 grupos do módulo 2.5
+ * (Levantamentos, Ambiental, Taxas Oficiais, Concessionárias), mas editável
+ * manualmente conforme o processo avança na vida real — aprovação é um
+ * processo com data e responsável, não um booleano estático.
+ */
+export const approvals = mysqlTable("approvals", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId").notNull(), // Foreign key to projects
+  orgao: varchar("orgao", { length: 255 }).notNull(), // órgão/concessionária responsável, ex: "GRAPROHAB", "Concessionária de Água"
+  grupo: varchar("grupo", { length: 100 }).notNull(), // agrupamento visual: graprohab | levantamentos | ambiental | taxas_oficiais | concessionarias
+  item: varchar("item", { length: 500 }).notNull(), // descrição do item/critério
+  status: mysqlEnum("status", ["nao_iniciado", "protocolado", "em_analise", "aprovado", "pendencia"])
+    .default("nao_iniciado")
+    .notNull(),
+  dataProtocolo: timestamp("dataProtocolo"), // quando foi protocolado
+  prazoEstimado: timestamp("prazoEstimado"), // prazo estimado de resposta do órgão
+  responsavel: varchar("responsavel", { length: 255 }), // pessoa/empresa responsável pelo item
+  observacao: text("observacao"), // texto livre
+  origem: mysqlEnum("origem", ["automatico", "manual"]).default("automatico").notNull(), // gerado pelo seed ou criado manualmente
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Approval = typeof approvals.$inferSelect;
+export type InsertApproval = typeof approvals.$inferInsert;
+
 // ============================================================================
 // MÓDULO DE CONFIGURAÇÃO (camada administrativa global — spec seção 5)
 //

@@ -19,6 +19,8 @@ import {
   InsertScenario,
   partnershipAnalysis,
   InsertPartnershipAnalysis,
+  approvals,
+  InsertApproval,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -347,6 +349,61 @@ export async function replaceScenarios(projectId: number, data: Omit<InsertScena
     await db.insert(scenarios).values(data.map((row) => ({ ...row, projectId })));
   }
   return getScenariosByProjectId(projectId);
+}
+
+// Approvals (FASE 2 — spec seção 3): checklist de acompanhamento por
+// órgão/concessionária. Diferente das tabelas *_engine_data, tem N linhas
+// por projeto e cada linha é editada individualmente ao longo do processo
+// real (não é um recálculo que substitui tudo).
+export async function getApprovalsByProjectId(projectId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get approvals: database not available");
+    return [];
+  }
+  return db.select().from(approvals).where(eq(approvals.projectId, projectId));
+}
+
+/** Insere o checklist inicial. Não seeda de novo se o projeto já tiver itens — evita duplicar ao reabrir o wizard/recalcular o GeoEngine. */
+export async function seedApprovalsIfEmpty(projectId: number, items: Omit<InsertApproval, "projectId" | "id">[]) {
+  const db = await getDb();
+  if (!db) throw new Error("[Database] Cannot seed approvals: database not available");
+
+  const existing = await db.select({ id: approvals.id }).from(approvals).where(eq(approvals.projectId, projectId)).limit(1);
+  if (existing.length > 0) {
+    return getApprovalsByProjectId(projectId);
+  }
+  if (items.length > 0) {
+    await db.insert(approvals).values(items.map((item) => ({ ...item, projectId })));
+  }
+  return getApprovalsByProjectId(projectId);
+}
+
+export async function createApproval(projectId: number, data: Omit<InsertApproval, "projectId" | "id">) {
+  const db = await getDb();
+  if (!db) throw new Error("[Database] Cannot create approval: database not available");
+  const [result] = await db.insert(approvals).values({ ...data, projectId });
+  const insertId = (result as { insertId: number }).insertId;
+  const [row] = await db.select().from(approvals).where(eq(approvals.id, insertId)).limit(1);
+  return row;
+}
+
+export async function updateApproval(
+  id: number,
+  projectId: number,
+  data: Partial<Omit<InsertApproval, "projectId" | "id">>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("[Database] Cannot update approval: database not available");
+  await db.update(approvals).set(data).where(and(eq(approvals.id, id), eq(approvals.projectId, projectId)));
+  const [row] = await db.select().from(approvals).where(eq(approvals.id, id)).limit(1);
+  return row;
+}
+
+export async function deleteApproval(id: number, projectId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("[Database] Cannot delete approval: database not available");
+  await db.delete(approvals).where(and(eq(approvals.id, id), eq(approvals.projectId, projectId)));
 }
 
 // TODO: add feature queries here as your schema grows.

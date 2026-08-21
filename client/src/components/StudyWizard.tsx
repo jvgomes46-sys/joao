@@ -170,6 +170,7 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
   const calculateSalesEngineMutation = trpc.salesEngine.calculate.useMutation();
   const calculateFinanceEngineMutation = trpc.financeEngine.calculate.useMutation();
   const calculateTaxEngineMutation = trpc.taxEngine.calculate.useMutation();
+  const seedApprovalsMutation = trpc.approvals.seed.useMutation();
 
   const currentStepIndex = STEPS.findIndex((s) => s.id === currentStep);
   const progress = ((currentStepIndex + 1) / STEPS.length) * 100;
@@ -282,6 +283,10 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
         areaMediaLoteAlvo: data.modoLotes === "automatico" && data.areaMediaLoteAlvo ? Number(data.areaMediaLoteAlvo) : undefined,
         numeroLotesManual: data.modoLotes === "manual" && data.numeroLotesManual ? Number(data.numeroLotesManual) : undefined,
       });
+
+      // 1b) Checklist de aprovações (FASE 2, spec seção 3) — semeado a partir
+      // do checklist GRAPROHAB que o GeoEngine acabou de calcular.
+      await seedApprovalsMutation.mutateAsync({ projectId: project.id });
 
       // 2) CostEngine — orçamento parametrizado com toda a lógica condicional. Depende do GeoEngine.
       await calculateCostEngineMutation.mutateAsync({

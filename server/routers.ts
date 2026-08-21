@@ -28,6 +28,8 @@ import { runSalesEngine } from "./services/salesEngineService";
 import { runTaxEngine } from "./services/taxEngineService";
 import { runScenarioEngine } from "./services/scenarioEngineService";
 import { getDashboardData } from "./services/dashboardService";
+import { seedApprovalsForProject, listApprovals } from "./services/approvalsService";
+import { createApproval, deleteApproval, updateApproval } from "./db";
 import { TRPCError } from "@trpc/server";
 
 /** Garante que o projeto existe e pertence ao usuário antes de ler/gravar dados de um motor. */
@@ -460,6 +462,89 @@ export const appRouter = router({
             message: error instanceof Error ? error.message : "Falha ao calcular Cenários",
           });
         }
+      }),
+  }),
+
+  approvals: router({
+    listByProject: protectedProcedure
+      .input(z.object({ projectId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        try {
+          return await listApprovals(input.projectId, ctx.user.id);
+        } catch (error) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: error instanceof Error ? error.message : "Falha ao listar aprovações",
+          });
+        }
+      }),
+
+    seed: protectedProcedure
+      .input(z.object({ projectId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await seedApprovalsForProject(input.projectId, ctx.user.id);
+        } catch (error) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: error instanceof Error ? error.message : "Falha ao gerar checklist de aprovações",
+          });
+        }
+      }),
+
+    create: protectedProcedure
+      .input(
+        z.object({
+          projectId: z.number(),
+          orgao: z.string().min(1),
+          grupo: z.string().min(1),
+          item: z.string().min(1),
+          status: z.enum(["nao_iniciado", "protocolado", "em_analise", "aprovado", "pendencia"]).optional(),
+          dataProtocolo: z.string().datetime().optional(),
+          prazoEstimado: z.string().datetime().optional(),
+          responsavel: z.string().optional(),
+          observacao: z.string().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await requireOwnedProject(input.projectId, ctx.user.id);
+        const { projectId, dataProtocolo, prazoEstimado, ...rest } = input;
+        return await createApproval(projectId, {
+          ...rest,
+          origem: "manual",
+          dataProtocolo: dataProtocolo ? new Date(dataProtocolo) : undefined,
+          prazoEstimado: prazoEstimado ? new Date(prazoEstimado) : undefined,
+        });
+      }),
+
+    update: protectedProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          projectId: z.number(),
+          status: z.enum(["nao_iniciado", "protocolado", "em_analise", "aprovado", "pendencia"]).optional(),
+          dataProtocolo: z.string().datetime().nullable().optional(),
+          prazoEstimado: z.string().datetime().nullable().optional(),
+          responsavel: z.string().nullable().optional(),
+          observacao: z.string().nullable().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await requireOwnedProject(input.projectId, ctx.user.id);
+        const { id, projectId, dataProtocolo, prazoEstimado, ...rest } = input;
+        return await updateApproval(id, projectId, {
+          ...rest,
+          dataProtocolo: dataProtocolo === undefined ? undefined : dataProtocolo === null ? null : new Date(dataProtocolo),
+          prazoEstimado: prazoEstimado === undefined ? undefined : prazoEstimado === null ? null : new Date(prazoEstimado),
+        });
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number(), projectId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await requireOwnedProject(input.projectId, ctx.user.id);
+        await deleteApproval(input.id, input.projectId);
+        return { success: true };
       }),
   }),
 

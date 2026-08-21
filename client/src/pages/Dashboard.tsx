@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, Wallet, PiggyBank, Percent, FileDown } from "lucide-react";
+import { ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, Wallet, PiggyBank, Percent, FileDown, ClipboardCheck } from "lucide-react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Pie, PieChart, Cell } from "recharts";
 
@@ -150,6 +150,12 @@ export default function Dashboard() {
               {data.regimeTributario.replace("_", " ")}
             </Badge>
           )}
+          <Link href={`/projetos/${projectId}/aprovacoes`}>
+            <Button variant="outline" size="sm" className="gap-1">
+              <ClipboardCheck className="w-4 h-4" />
+              Aprovações
+            </Button>
+          </Link>
           <a href={`/api/reports/${projectId}/one-pager.pdf`} target="_blank" rel="noreferrer">
             <Button variant="outline" size="sm" className="gap-1">
               <FileDown className="w-4 h-4" />

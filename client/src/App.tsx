@@ -8,6 +8,7 @@ import DashboardLayout from "./components/DashboardLayout";
 import Home from "./pages/Home";
 import Projects from "./pages/Projects";
 import Dashboard from "./pages/Dashboard";
+import Approvals from "./pages/Approvals";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -22,6 +23,11 @@ function Router() {
       <Route path="/projetos/:id">
         <DashboardLayout>
           <Dashboard />
+        </DashboardLayout>
+      </Route>
+      <Route path="/projetos/:id/aprovacoes">
+        <DashboardLayout>
+          <Approvals />
         </DashboardLayout>
       </Route>
       <Route path="/404" component={NotFound} />
