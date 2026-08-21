@@ -1,42 +1,83 @@
 /**
  * GeoEngine - Motor Urbanístico
  * Cálculos de áreas, conformidade com Lei 6.766/79 e checklist GRAPROHAB
+ *
+ * Regras replicadas da Especificação EVTE PRO, seção 2.2 e 2.1:
+ * - APP/Reserva Legal é deduzida da gleba ANTES de qualquer percentual
+ *   (Área Parcelável = Gleba − APP/RL)
+ * - % área verde / institucional / sistema viário / calçadas são inputs por
+ *   projeto (com defaults), nunca constantes fixas
+ * - Quantidade de lotes: modo Automático (área ÷ lote-alvo) ou Manual (nº
+ *   digitado, e a área média por lote vira resultado, não input)
+ * - Densidade (hab/ha) alimenta a regra de dispensa de rede coletora
+ *   (< 20 hab/ha dispensa rede coletora — afeta o CostEngine)
  */
 
+export type ModoLotes = "automatico" | "manual";
+
 export interface GeoEngineInput {
-  areaBruta: number; // m²
-  areaVerde?: number; // m² (será calculada se não informada)
-  areaInstitucional?: number; // m² (será calculada se não informada)
-  sistemaViario?: number; // m² (será calculada se não informada)
-  percentualVerde?: number; // % (padrão: 15%)
-  percentualInstitucional?: number; // % (padrão: 5%)
+  areaBruta: number; // m² — área total da gleba
+  areaAPP?: number; // m² — APP/Reserva Legal, deduzida antes de qualquer percentual (padrão: 0)
+
+  percentualVerde?: number; // % sobre a área parcelável (padrão: 15%, editável)
+  percentualInstitucional?: number; // % sobre a área parcelável (padrão: 5%, editável)
+  percentualSistemaViario?: number; // % sobre a área parcelável (padrão: 20%, editável)
+  percentualCalcadas?: number; // % sobre a área parcelável (padrão: 0%, editável)
+
+  // Quantidade de lotes: alternância Automático/Manual (spec seção 2.1 e regra 13 da seção 6)
+  modoLotes?: ModoLotes; // padrão: "automatico"
+  areaMediaLoteAlvo?: number; // m² — obrigatório se modoLotes = "automatico"
+  numeroLotesManual?: number; // obrigatório se modoLotes = "manual"
+
+  // Densidade (regra da seção 6: < 20 hab/ha dispensa rede coletora)
+  taxaOcupacaoHabPorLote?: number; // hab/lote (padrão: 3.5, referência técnica comum para loteamentos)
+
   coeficienteAproveitamento?: number; // CA (padrão: 1.0)
   taxaOcupacao?: number; // TO em % (padrão: 60%)
   gabarito?: number; // altura máxima em metros
+
+  // Pisos mínimos de conformidade (vêm do Módulo de Configuração — legislação
+  // municipal ou piso federal Lei 6.766/79 — nunca hardcoded no motor)
+  pisoPercentualVerdeMin?: number; // padrão: 15
+  pisoPercentualInstitucionalMin?: number; // padrão: 5
+  pisoAreaMinimaLote?: number; // padrão: 125 m²
 }
 
 export interface GeoEngineOutput {
   areaBruta: number;
+  areaAPP: number;
+  areaParcelavel: number;
+
   areaVerde: number;
   areaInstitucional: number;
   sistemaViario: number;
-  areaLiquida: number;
-  areaComercializavel: number;
-  
-  // Indicadores
+  areaCalcadas: number;
+  areaVendavel: number;
+
+  // Indicadores (percentuais sobre a área parcelável, não sobre a gleba bruta)
   percentualVerde: number;
   percentualInstitucional: number;
   percentualSistemaViario: number;
-  
+  percentualCalcadas: number;
+
   // Coeficientes
   coeficienteAproveitamento: number;
   taxaOcupacao: number;
   potencialConstrutivo: number;
-  
+
+  // Lotes
+  modoLotes: ModoLotes;
+  numeroLotes: number;
+  areaMediaLote: number; // input se modo automático, resultado calculado se modo manual
+
+  // Densidade e dispensa de rede coletora (regra crítica seção 6)
+  densidadeHabHa: number;
+  dispensaRedeColetora: boolean; // true quando densidadeHabHa < 20
+
   // Conformidade
   conformidadeLei6766: boolean;
   alertasConformidade: string[];
-  
+
   // GRAPROHAB
   checklistGRAPROHAB: GRAPROHABItem[];
   conformidadeGRAPROHAB: boolean;
@@ -56,79 +97,141 @@ export interface GRAPROHABItem {
 export function calcularGeoEngine(input: GeoEngineInput): GeoEngineOutput {
   const {
     areaBruta,
+    areaAPP = 0,
     percentualVerde = 15,
     percentualInstitucional = 5,
+    percentualSistemaViario = 20,
+    percentualCalcadas = 0,
+    modoLotes = "automatico",
+    taxaOcupacaoHabPorLote = 3.5,
     coeficienteAproveitamento = 1.0,
     taxaOcupacao = 60,
-    gabarito,
+    pisoPercentualVerdeMin = 15,
+    pisoPercentualInstitucionalMin = 5,
   } = input;
 
-  // Cálculos de áreas
-  const areaVerde = input.areaVerde ?? (areaBruta * percentualVerde) / 100;
-  const areaInstitucional = input.areaInstitucional ?? (areaBruta * percentualInstitucional) / 100;
-  
-  // Sistema viário é o restante
-  const areaComPublica = areaVerde + areaInstitucional;
-  const sistemaViario = input.sistemaViario ?? areaBruta - areaComPublica - (areaBruta * 0.25); // Estimativa padrão
-  
-  const areaLiquida = areaBruta - sistemaViario;
-  const areaComercializavel = areaLiquida - areaVerde - areaInstitucional;
+  if (areaAPP > areaBruta) {
+    throw new Error("Área de APP/Reserva Legal não pode ser maior que a área bruta da gleba");
+  }
 
-  // Indicadores percentuais
-  const percentualVerdeFinal = (areaVerde / areaBruta) * 100;
-  const percentualInstitucionalFinal = (areaInstitucional / areaBruta) * 100;
-  const percentualSistemaViarioFinal = (sistemaViario / areaBruta) * 100;
+  // APP/RL sai da gleba ANTES de qualquer percentual (spec seção 2.1)
+  const areaParcelavel = areaBruta - areaAPP;
+
+  // Percentuais incidem sobre a área parcelável, não sobre a gleba bruta
+  const areaVerde = (areaParcelavel * percentualVerde) / 100;
+  const areaInstitucional = (areaParcelavel * percentualInstitucional) / 100;
+  const sistemaViario = (areaParcelavel * percentualSistemaViario) / 100;
+  const areaCalcadas = (areaParcelavel * percentualCalcadas) / 100;
+
+  // Área Vendável = Parcelável − Públicas (verde+institucional) − Viário (sistema viário+calçadas)
+  const areaVendavel = areaParcelavel - areaVerde - areaInstitucional - sistemaViario - areaCalcadas;
+
+  if (areaVendavel <= 0) {
+    throw new Error(
+      "Área vendável resultou em zero ou negativa — percentuais de área pública/viário somam mais que 100% da área parcelável"
+    );
+  }
+
+  // Indicadores percentuais (sobre a área parcelável — base de referência da Lei 6.766/79 local)
+  const percentualVerdeFinal = (areaVerde / areaParcelavel) * 100;
+  const percentualInstitucionalFinal = (areaInstitucional / areaParcelavel) * 100;
+  const percentualSistemaViarioFinal = (sistemaViario / areaParcelavel) * 100;
+  const percentualCalcadasFinal = (areaCalcadas / areaParcelavel) * 100;
 
   // Potencial construtivo
-  const potencialConstrutivo = areaComercializavel * coeficienteAproveitamento;
+  const potencialConstrutivo = areaVendavel * coeficienteAproveitamento;
 
-  // Validação Lei 6.766/79
+  // Quantidade de lotes — alternância Automático/Manual (regra 13, seção 6)
+  let numeroLotes: number;
+  let areaMediaLote: number;
+
+  if (modoLotes === "automatico") {
+    if (!input.areaMediaLoteAlvo || input.areaMediaLoteAlvo <= 0) {
+      throw new Error("Modo Automático requer areaMediaLoteAlvo (m²) > 0");
+    }
+    numeroLotes = Math.floor(areaVendavel / input.areaMediaLoteAlvo);
+    areaMediaLote = input.areaMediaLoteAlvo; // input, ecoado como resultado
+  } else {
+    if (!input.numeroLotesManual || input.numeroLotesManual <= 0) {
+      throw new Error("Modo Manual requer numeroLotesManual > 0");
+    }
+    numeroLotes = input.numeroLotesManual;
+    areaMediaLote = areaVendavel / numeroLotes; // resultado calculado, não input
+  }
+
+  if (numeroLotes <= 0) {
+    throw new Error("Cálculo resultou em zero lotes — revisar área média do lote ou percentuais de área pública");
+  }
+
+  // Densidade (hab/ha) e regra de dispensa de rede coletora (seção 6)
+  const areaBrutaHa = areaBruta / 10000;
+  const densidadeHabHa = (numeroLotes * taxaOcupacaoHabPorLote) / areaBrutaHa;
+  const dispensaRedeColetora = densidadeHabHa < 20;
+
+  // Validação Lei 6.766/79 (piso pode vir da legislação municipal ou do piso federal)
   const alertasConformidade: string[] = [];
   let conformidadeLei6766 = true;
 
-  if (percentualVerdeFinal < 15) {
-    alertasConformidade.push(`Área verde insuficiente: ${percentualVerdeFinal.toFixed(2)}% (mínimo 15%)`);
+  if (percentualVerdeFinal < pisoPercentualVerdeMin) {
+    alertasConformidade.push(
+      `Área verde insuficiente: ${percentualVerdeFinal.toFixed(2)}% (mínimo ${pisoPercentualVerdeMin}%)`
+    );
     conformidadeLei6766 = false;
   }
 
-  if (percentualInstitucionalFinal < 5) {
-    alertasConformidade.push(`Área institucional insuficiente: ${percentualInstitucionalFinal.toFixed(2)}% (mínimo 5%)`);
+  if (percentualInstitucionalFinal < pisoPercentualInstitucionalMin) {
+    alertasConformidade.push(
+      `Área institucional insuficiente: ${percentualInstitucionalFinal.toFixed(2)}% (mínimo ${pisoPercentualInstitucionalMin}%)`
+    );
     conformidadeLei6766 = false;
   }
 
   if (percentualSistemaViarioFinal < 20) {
-    alertasConformidade.push(`Sistema viário insuficiente: ${percentualSistemaViarioFinal.toFixed(2)}% (recomendado mínimo 20%)`);
+    alertasConformidade.push(
+      `Sistema viário insuficiente: ${percentualSistemaViarioFinal.toFixed(2)}% (recomendado mínimo 20%)`
+    );
+  }
+
+  if (dispensaRedeColetora) {
+    alertasConformidade.push(
+      `Densidade de ${densidadeHabHa.toFixed(2)} hab/ha está abaixo de 20 hab/ha — dispensa rede coletora interna (afeta drenagem, pavimentação e esgoto no orçamento)`
+    );
   }
 
   // Checklist GRAPROHAB
-  const checklistGRAPROHAB = gerarChecklistGRAPROHAB(
-    input,
-    {
-      areaBruta,
-      areaVerde,
-      areaInstitucional,
-      sistemaViario,
-      percentualVerdeFinal,
-      percentualInstitucionalFinal,
-      potencialConstrutivo,
-    }
-  );
+  const checklistGRAPROHAB = gerarChecklistGRAPROHAB(input, {
+    areaParcelavel,
+    areaVerde,
+    areaInstitucional,
+    sistemaViario,
+    percentualVerdeFinal,
+    percentualInstitucionalFinal,
+    potencialConstrutivo,
+  });
 
   const conformidadeGRAPROHAB = checklistGRAPROHAB.every((item) => item.conforme);
 
   return {
     areaBruta,
+    areaAPP,
+    areaParcelavel,
     areaVerde,
     areaInstitucional,
     sistemaViario,
-    areaLiquida,
-    areaComercializavel,
+    areaCalcadas,
+    areaVendavel,
     percentualVerde: percentualVerdeFinal,
     percentualInstitucional: percentualInstitucionalFinal,
     percentualSistemaViario: percentualSistemaViarioFinal,
+    percentualCalcadas: percentualCalcadasFinal,
     coeficienteAproveitamento,
     taxaOcupacao,
     potencialConstrutivo,
+    modoLotes,
+    numeroLotes,
+    areaMediaLote,
+    densidadeHabHa,
+    dispensaRedeColetora,
     conformidadeLei6766,
     alertasConformidade,
     checklistGRAPROHAB,
@@ -142,7 +245,7 @@ export function calcularGeoEngine(input: GeoEngineInput): GeoEngineOutput {
 function gerarChecklistGRAPROHAB(
   input: GeoEngineInput,
   calculados: {
-    areaBruta: number;
+    areaParcelavel: number;
     areaVerde: number;
     areaInstitucional: number;
     sistemaViario: number;
@@ -174,8 +277,8 @@ function gerarChecklistGRAPROHAB(
     id: "graprohab_003",
     categoria: "Áreas Públicas",
     criterio: "Sistema viário adequado (mínimo 20%)",
-    conforme: calculados.sistemaViario / calculados.areaBruta >= 0.2,
-    observacao: `Atual: ${((calculados.sistemaViario / calculados.areaBruta) * 100).toFixed(2)}%`,
+    conforme: calculados.sistemaViario / calculados.areaParcelavel >= 0.2,
+    observacao: `Atual: ${((calculados.sistemaViario / calculados.areaParcelavel) * 100).toFixed(2)}%`,
   });
 
   // Lotes e Ocupação
@@ -275,10 +378,11 @@ function gerarChecklistGRAPROHAB(
 }
 
 /**
- * Calcula o número de lotes por tipologia
+ * Calcula o número de lotes por tipologia (distribuição de um mix de tipologias
+ * dentro da área vendável — usado quando o empreendimento mistura tipos de lote)
  */
 export function calcularLotesPorTipologia(
-  areaComercializavel: number,
+  areaVendavel: number,
   tipologias: {
     nome: string;
     percentual: number;
@@ -289,19 +393,19 @@ export function calcularLotesPorTipologia(
   percentual: number;
   areaTotal: number;
   numeroLotes: number;
-  areMedia: number;
+  areaMediaResultante: number;
 }[] {
   return tipologias.map((tip) => {
-    const areaTotal = (areaComercializavel * tip.percentual) / 100;
+    const areaTotal = (areaVendavel * tip.percentual) / 100;
     const numeroLotes = Math.floor(areaTotal / tip.areaMedia);
-    const areaMedia = areaTotal / numeroLotes;
+    const areaMediaResultante = numeroLotes > 0 ? areaTotal / numeroLotes : 0;
 
     return {
       tipologia: tip.nome,
       percentual: tip.percentual,
       areaTotal,
       numeroLotes,
-      areMedia,
+      areaMediaResultante,
     };
   });
 }

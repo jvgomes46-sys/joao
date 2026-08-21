@@ -3,7 +3,8 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { getProjectsByUserId, getProjectById, createProject, updateProject, deleteProject } from "./db";
+import { getProjectsByUserId, getProjectById, createProject, updateProject, deleteProject, getGeoEngineDataByProjectId } from "./db";
+import { runGeoEngine } from "./services/geoEngineService";
 import { TRPCError } from "@trpc/server";
 
 export const appRouter = router({
@@ -95,6 +96,49 @@ export const appRouter = router({
         }
         const result = await deleteProject(input.id, ctx.user.id);
         return { success: true };
+      }),
+  }),
+
+  geoEngine: router({
+    getByProjectId: protectedProcedure
+      .input(z.object({ projectId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const project = await getProjectById(input.projectId, ctx.user.id);
+        if (!project) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Projeto não encontrado" });
+        }
+        return await getGeoEngineDataByProjectId(input.projectId);
+      }),
+
+    calculate: protectedProcedure
+      .input(
+        z.object({
+          projectId: z.number(),
+          areaBruta: z.number().positive(),
+          areaAPP: z.number().min(0).optional(),
+          percentualVerde: z.number().min(0).max(100).optional(),
+          percentualInstitucional: z.number().min(0).max(100).optional(),
+          percentualSistemaViario: z.number().min(0).max(100).optional(),
+          percentualCalcadas: z.number().min(0).max(100).optional(),
+          modoLotes: z.enum(["automatico", "manual"]).optional(),
+          areaMediaLoteAlvo: z.number().positive().optional(),
+          numeroLotesManual: z.number().int().positive().optional(),
+          taxaOcupacaoHabPorLote: z.number().positive().optional(),
+          coeficienteAproveitamento: z.number().positive().optional(),
+          taxaOcupacao: z.number().min(0).max(100).optional(),
+          gabarito: z.number().positive().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { projectId, ...geoInput } = input;
+        try {
+          return await runGeoEngine(projectId, ctx.user.id, geoInput);
+        } catch (error) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: error instanceof Error ? error.message : "Falha ao calcular GeoEngine",
+          });
+        }
       }),
   }),
 });

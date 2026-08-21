@@ -1,6 +1,6 @@
 import { eq, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, projects, InsertProject } from "../drizzle/schema";
+import { InsertUser, users, projects, InsertProject, geoEngineData, InsertGeoEngineData } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -138,8 +138,10 @@ export async function createProject(data: InsertProject) {
   }
 
   try {
-    const result = await db.insert(projects).values(data);
-    return result;
+    const [result] = await db.insert(projects).values(data);
+    const insertId = (result as { insertId: number }).insertId;
+    const [created] = await db.select().from(projects).where(eq(projects.id, insertId)).limit(1);
+    return created;
   } catch (error) {
     console.error("[Database] Failed to create project:", error);
     throw error;
@@ -181,6 +183,35 @@ export async function deleteProject(projectId: number, userId: number) {
     console.error("[Database] Failed to delete project:", error);
     throw error;
   }
+}
+
+// GeoEngine data queries — um registro por projeto, sobrescrito a cada recálculo
+export async function getGeoEngineDataByProjectId(projectId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get geo engine data: database not available");
+    return undefined;
+  }
+
+  const result = await db.select().from(geoEngineData).where(eq(geoEngineData.projectId, projectId)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function upsertGeoEngineData(projectId: number, data: Omit<InsertGeoEngineData, "projectId" | "id">) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("[Database] Cannot persist GeoEngine result: database not available");
+  }
+
+  const existing = await getGeoEngineDataByProjectId(projectId);
+
+  if (existing) {
+    await db.update(geoEngineData).set(data).where(eq(geoEngineData.projectId, projectId));
+  } else {
+    await db.insert(geoEngineData).values({ ...data, projectId });
+  }
+
+  return getGeoEngineDataByProjectId(projectId);
 }
 
 // TODO: add feature queries here as your schema grows.
