@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, Wallet, PiggyBank, Percent } from "lucide-react";
+import { ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, Wallet, PiggyBank, Percent, FileDown } from "lucide-react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Pie, PieChart, Cell } from "recharts";
 
@@ -144,11 +144,25 @@ export default function Dashboard() {
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">{data.projectName}</h1>
           <p className="text-muted-foreground text-sm mt-1">Dashboard Executivo</p>
         </div>
-        {data.regimeTributario && (
-          <Badge variant="secondary" className="uppercase">
-            {data.regimeTributario.replace("_", " ")}
-          </Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {data.regimeTributario && (
+            <Badge variant="secondary" className="uppercase">
+              {data.regimeTributario.replace("_", " ")}
+            </Badge>
+          )}
+          <a href={`/api/reports/${projectId}/one-pager.pdf`} target="_blank" rel="noreferrer">
+            <Button variant="outline" size="sm" className="gap-1">
+              <FileDown className="w-4 h-4" />
+              One-Pager
+            </Button>
+          </a>
+          <a href={`/api/reports/${projectId}/technical.pdf`} target="_blank" rel="noreferrer">
+            <Button variant="default" size="sm" className="gap-1">
+              <FileDown className="w-4 h-4" />
+              Relatório Técnico
+            </Button>
+          </a>
+        </div>
       </div>
 
       {/* Bloco 1: VGV / CAPEX */}
