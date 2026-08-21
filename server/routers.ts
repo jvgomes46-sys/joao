@@ -41,6 +41,7 @@ import {
   updateStage,
 } from "./services/constructionService";
 import { STAGE_TEMPLATES } from "./engines/constructionEngine";
+import { CONFIG_TABLES, createConfigRow, deleteConfigRow, listConfigRows, updateConfigRow, type ConfigTableName } from "./services/adminConfigService";
 import { TRPCError } from "@trpc/server";
 
 /** Garante que o projeto existe e pertence ao usuário antes de ler/gravar dados de um motor. */
@@ -677,6 +678,50 @@ export const appRouter = router({
           return await updateStage(stageId, projectId, ctx.user.id, rest);
         } catch (error) {
           throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Falha ao atualizar etapa" });
+        }
+      }),
+  }),
+
+  adminConfig: router({
+    tables: protectedProcedure.query(() => Object.keys(CONFIG_TABLES) as ConfigTableName[]),
+
+    list: protectedProcedure
+      .input(z.object({ table: z.enum(Object.keys(CONFIG_TABLES) as [ConfigTableName, ...ConfigTableName[]]) }))
+      .query(async ({ ctx, input }) => {
+        try {
+          return await listConfigRows(input.table, ctx.user.role);
+        } catch (error) {
+          throw new TRPCError({ code: "FORBIDDEN", message: error instanceof Error ? error.message : "Falha ao listar configuração" });
+        }
+      }),
+
+    create: protectedProcedure
+      .input(z.object({ table: z.enum(Object.keys(CONFIG_TABLES) as [ConfigTableName, ...ConfigTableName[]]), data: z.record(z.string(), z.unknown()) }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await createConfigRow(input.table, ctx.user.role, input.data);
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Falha ao criar linha de configuração" });
+        }
+      }),
+
+    update: protectedProcedure
+      .input(z.object({ table: z.enum(Object.keys(CONFIG_TABLES) as [ConfigTableName, ...ConfigTableName[]]), id: z.number(), data: z.record(z.string(), z.unknown()) }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await updateConfigRow(input.table, ctx.user.role, input.id, input.data);
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Falha ao atualizar linha de configuração" });
+        }
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ table: z.enum(Object.keys(CONFIG_TABLES) as [ConfigTableName, ...ConfigTableName[]]), id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await deleteConfigRow(input.table, ctx.user.role, input.id);
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Falha ao apagar linha de configuração" });
         }
       }),
   }),
