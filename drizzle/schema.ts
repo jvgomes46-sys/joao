@@ -128,9 +128,12 @@ export const financeEngineData = mysqlTable("finance_engine_data", {
   id: int("id").autoincrement().primaryKey(),
   projectId: int("projectId").notNull(), // Foreign key to projects
   vpl: decimal("vpl", { precision: 15, scale: 2 }), // Valor Presente Líquido (R$)
-  tir: decimal("tir", { precision: 8, scale: 4 }), // Taxa Interna de Retorno (%)
+  tir: decimal("tir", { precision: 8, scale: 4 }), // Taxa Interna de Retorno a.a. (%)
+  tirMensal: decimal("tirMensal", { precision: 8, scale: 4 }), // Taxa Interna de Retorno a.m. (%)
+  tirIndisponivelMotivo: varchar("tirIndisponivelMotivo", { length: 500 }), // por que a TIR não pôde ser calculada (projeto não se paga / obra autofinanciada / sem raiz real)
   roi: decimal("roi", { precision: 8, scale: 4 }), // Retorno sobre Investimento (%)
-  payback: decimal("payback", { precision: 8, scale: 2 }), // Payback (meses)
+  payback: decimal("payback", { precision: 8, scale: 2 }), // Payback (meses) — null = não paga dentro do horizonte
+  alertasConsistencia: json("alertasConsistencia"), // JSON com alertas de consistência (spec seção 2.8)
   exposicaoMaximaCaixa: decimal("exposicaoMaximaCaixa", { precision: 15, scale: 2 }), // Exposição máxima de caixa (R$)
   lucroTotal: decimal("lucroTotal", { precision: 15, scale: 2 }), // Lucro total (R$)
   margemLucro: decimal("margemLucro", { precision: 8, scale: 4 }), // Margem de lucro (%)

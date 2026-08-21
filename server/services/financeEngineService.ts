@@ -1,0 +1,178 @@
+import { createConfigSnapshot, getFinancialIndex, getPrazoObraPorPorte } from "../config";
+import { getCostEngineDataByProjectId, getGeoEngineDataByProjectId, getProjectById, upsertFinanceEngineData } from "../db";
+import { calcularFinanceEngine, CurvaObra, CurvaVendas, FinanceEngineInput, FinanceEngineOutput } from "../engines/financeEngine";
+
+export interface FinanceEngineServiceInput {
+  // Cronograma (Premissas — módulo 2.1)
+  duracaoAprovacoesMeses: number;
+  inicioVendasMes: number;
+
+  // Comercial
+  precoBrutoPorLote: number; // R$ — do SalesEngine (VGV/lotes ou preço médio × área)
+  prazoVendasMeses: number;
+  curvaVendas: CurvaVendas;
+
+  // Deduções e parcelamento
+  percentualDeducoesVenda: number; // fração 0-1
+  percentualEntrada: number;
+  numeroParcelas: number;
+
+  // Financeiro
+  tmaAnualFracao: number;
+  reinvestirCaixaPositivo?: boolean;
+
+  // Indexação — se omitido, usa os índices vigentes do Módulo de Configuração (INCC/IPCA)
+  custosIndexados?: boolean;
+  indiceCustosAnualFracao?: number;
+  recebiveisIndexados?: boolean;
+  indiceRecebiveisAnualFracao?: number;
+
+  // Aprovações — módulo 2.5 ainda não existe; valor informado explicitamente
+  capexAprovacoesTotal?: number;
+  curvaObra?: CurvaObra; // padrão: "curva_s"
+
+  horizonteMeses?: number;
+}
+
+const GRUPOS_COST_ENGINE_PARA_FLUXO = [
+  "terraplanagem",
+  "drenagem",
+  "pavimentacao",
+  "agua",
+  "esgoto",
+  "energia",
+  "paisagismo", // = servicos_complementares no CostEngine
+  "portaria", // = obras_civis_condominio no CostEngine
+] as const;
+
+const MAPA_CAMPO_PARA_GRUPO_JANELA: Record<(typeof GRUPOS_COST_ENGINE_PARA_FLUXO)[number], string> = {
+  terraplanagem: "terraplenagem",
+  drenagem: "drenagem",
+  pavimentacao: "pavimentacao",
+  agua: "agua",
+  esgoto: "esgoto",
+  energia: "energia",
+  paisagismo: "servicos_complementares",
+  portaria: "obras_civis_condominio",
+};
+
+/**
+ * Orquestra o cálculo do FinanceEngine para um projeto:
+ * 1. Exige GeoEngine e CostEngine já calculados (fluxo de caixa não existe
+ *    sem quantidade de lotes e sem orçamento de obra).
+ * 2. Reconstrói os totais por grupo do CostEngine (escalados para incluir o
+ *    BDI, já que `cost_engine_data` grava os totais pré-BDI) para alimentar
+ *    a curva física de desembolso por disciplina.
+ * 3. Se a indexação não vier explícita, usa os índices INCC/IPCA vigentes
+ *    do Módulo de Configuração.
+ * 4. Roda o cálculo puro (`calcularFinanceEngine`) — fluxo de 120 meses,
+ *    VPL/TIR/payback/exposição, alertas de consistência.
+ * 5. Persiste o resultado (indicadores + fluxo mensal completo) e grava o
+ *    snapshot de configuração obrigatório (seção 5.3).
+ */
+export async function runFinanceEngine(projectId: number, userId: number, input: FinanceEngineServiceInput): Promise<FinanceEngineOutput> {
+  const project = await getProjectById(projectId, userId);
+  if (!project) {
+    throw new Error("Projeto não encontrado ou não pertence ao usuário");
+  }
+
+  const geo = await getGeoEngineDataByProjectId(projectId);
+  if (!geo || geo.numeroLotes === null) {
+    throw new Error("FinanceEngine depende do GeoEngine — calcule o GeoEngine deste projeto antes (número de lotes vem de lá)");
+  }
+
+  const cost = await getCostEngineDataByProjectId(projectId);
+  if (!cost || cost.investimentoTotal === null) {
+    throw new Error("FinanceEngine depende do CostEngine — calcule o CostEngine deste projeto antes (CAPEX e cronograma de obra vêm de lá)");
+  }
+  if (cost.custosIndiretos === null) {
+    throw new Error("Resultado do CostEngine incompleto para este projeto (BDI ausente) — recalcule o CostEngine");
+  }
+
+  const capexTotal = Number(cost.investimentoTotal);
+  const subtotalInfraSemBDI = GRUPOS_COST_ENGINE_PARA_FLUXO.reduce((s, campo) => s + Number(cost[campo] ?? 0), 0);
+  const bdiPercentualImplicito = subtotalInfraSemBDI > 0 ? Number(cost.custosIndiretos) / subtotalInfraSemBDI : 0;
+
+  const gruposCustoObra: Record<string, number> = {};
+  for (const campo of GRUPOS_COST_ENGINE_PARA_FLUXO) {
+    const valor = Number(cost[campo] ?? 0);
+    if (valor > 0) {
+      // Escala para "com BDI", igual ao Orçamento!F6 etc. da planilha mestre (BDI aplicado por item, já embutido no total do grupo)
+      gruposCustoObra[MAPA_CAMPO_PARA_GRUPO_JANELA[campo]] = valor * (1 + bdiPercentualImplicito);
+    }
+  }
+
+  let indiceCustosAnualFracao = input.indiceCustosAnualFracao;
+  let indiceRecebiveisAnualFracao = input.indiceRecebiveisAnualFracao;
+  if (input.custosIndexados && indiceCustosAnualFracao === undefined) {
+    const incc = await getFinancialIndex("incc");
+    indiceCustosAnualFracao = Number(incc.valor) / 100;
+  }
+  if (input.recebiveisIndexados && indiceRecebiveisAnualFracao === undefined) {
+    const ipca = await getFinancialIndex("ipca");
+    indiceRecebiveisAnualFracao = Number(ipca.valor) / 100;
+  }
+
+  if (geo.areaBruta === null) {
+    throw new Error("Resultado do GeoEngine incompleto para este projeto (área bruta ausente) — recalcule o GeoEngine");
+  }
+  const prazoObra = await getPrazoObraPorPorte(Number(geo.areaBruta));
+  const duracaoObraMeses = prazoObra.prazoMeses;
+
+  const financeInput: FinanceEngineInput = {
+    horizonteMeses: input.horizonteMeses,
+    duracaoAprovacoesMeses: input.duracaoAprovacoesMeses,
+    duracaoObraMeses,
+    inicioVendasMes: input.inicioVendasMes,
+    numeroLotes: geo.numeroLotes,
+    precoBrutoPorLote: input.precoBrutoPorLote,
+    prazoVendasMeses: input.prazoVendasMeses,
+    curvaVendas: input.curvaVendas,
+    percentualDeducoesVenda: input.percentualDeducoesVenda,
+    percentualEntrada: input.percentualEntrada,
+    numeroParcelas: input.numeroParcelas,
+    tmaAnualFracao: input.tmaAnualFracao,
+    reinvestirCaixaPositivo: input.reinvestirCaixaPositivo,
+    custosIndexados: input.custosIndexados,
+    indiceCustosAnualFracao,
+    recebiveisIndexados: input.recebiveisIndexados,
+    indiceRecebiveisAnualFracao,
+    capexAprovacoesTotal: input.capexAprovacoesTotal ?? 0,
+    curvaObra: input.curvaObra ?? "curva_s",
+    gruposCustoObra,
+    capexTotal,
+  };
+
+  const output = calcularFinanceEngine(financeInput);
+
+  await upsertFinanceEngineData(projectId, {
+    vpl: String(output.vpl),
+    tir: output.tirAnual !== null ? String(output.tirAnual) : null,
+    tirMensal: output.tirMensal !== null ? String(output.tirMensal) : null,
+    tirIndisponivelMotivo: output.tirIndisponivelMotivo,
+    roi: String(output.roiSobreCapex),
+    payback: output.paybackMes !== null ? String(output.paybackMes) : null,
+    exposicaoMaximaCaixa: String(output.exposicaoMaximaCaixa),
+    lucroTotal: String(output.resultadoNominal),
+    margemLucro: String(output.margemSobreReceitaRealizada),
+    tmaUtilizada: String(input.tmaAnualFracao),
+    fluxoCaixaMensal: output.fluxoMensal,
+    alertasConsistencia: output.alertas,
+  });
+
+  await createConfigSnapshot({
+    projectId,
+    engine: "finance_engine",
+    snapshotData: {
+      indiceCustosAnualFracao: indiceCustosAnualFracao ?? null,
+      indiceRecebiveisAnualFracao: indiceRecebiveisAnualFracao ?? null,
+      bdiPercentualImplicito,
+    },
+    overrides: {
+      capexAprovacoesTotal: input.capexAprovacoesTotal,
+      curvaObra: input.curvaObra,
+    },
+  });
+
+  return output;
+}

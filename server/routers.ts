@@ -21,6 +21,7 @@ import {
 } from "./db";
 import { runGeoEngine } from "./services/geoEngineService";
 import { runCostEngine } from "./services/costEngineService";
+import { runFinanceEngine } from "./services/financeEngineService";
 import { TRPCError } from "@trpc/server";
 
 /** Garante que o projeto existe e pertence ao usuário antes de ler/gravar dados de um motor. */
@@ -295,6 +296,41 @@ export const appRouter = router({
           tmaUtilizada: rest.tmaUtilizada !== undefined ? String(rest.tmaUtilizada) : undefined,
           capitalProprio: capitalDisponivel !== undefined ? String(capitalDisponivel) : undefined,
         });
+      }),
+
+    calculate: protectedProcedure
+      .input(
+        z.object({
+          projectId: z.number(),
+          duracaoAprovacoesMeses: z.number().positive(),
+          inicioVendasMes: z.number().int().positive(),
+          precoBrutoPorLote: z.number().positive(),
+          prazoVendasMeses: z.number().positive(),
+          curvaVendas: z.enum(["constante", "rampa", "curva_s"]),
+          percentualDeducoesVenda: z.number().min(0).max(1),
+          percentualEntrada: z.number().min(0).max(1),
+          numeroParcelas: z.number().int().positive(),
+          tmaAnualFracao: z.number().min(0).max(5),
+          reinvestirCaixaPositivo: z.boolean().optional(),
+          custosIndexados: z.boolean().optional(),
+          indiceCustosAnualFracao: z.number().min(0).max(5).optional(),
+          recebiveisIndexados: z.boolean().optional(),
+          indiceRecebiveisAnualFracao: z.number().min(0).max(5).optional(),
+          capexAprovacoesTotal: z.number().min(0).optional(),
+          curvaObra: z.enum(["linear", "curva_s"]).optional(),
+          horizonteMeses: z.number().positive().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { projectId, ...financeInput } = input;
+        try {
+          return await runFinanceEngine(projectId, ctx.user.id, financeInput);
+        } catch (error) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: error instanceof Error ? error.message : "Falha ao calcular FinanceEngine",
+          });
+        }
       }),
   }),
 

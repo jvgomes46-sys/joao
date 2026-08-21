@@ -316,7 +316,11 @@ export async function getFinanceEngineDataByProjectId(projectId: number) {
   }
   const result = await db.select().from(financeEngineData).where(eq(financeEngineData.projectId, projectId)).limit(1);
   if (result.length === 0) return undefined;
-  return { ...result[0], fluxoCaixaMensal: parseJsonColumn(result[0].fluxoCaixaMensal) };
+  return {
+    ...result[0],
+    fluxoCaixaMensal: parseJsonColumn(result[0].fluxoCaixaMensal),
+    alertasConsistencia: parseJsonColumn(result[0].alertasConsistencia),
+  };
 }
 
 export async function upsertFinanceEngineData(projectId: number, data: Omit<InsertFinanceEngineData, "projectId" | "id">) {
