@@ -42,6 +42,7 @@ import {
 } from "./services/constructionService";
 import { STAGE_TEMPLATES } from "./engines/constructionEngine";
 import { CONFIG_TABLES, createConfigRow, deleteConfigRow, listConfigRows, updateConfigRow, type ConfigTableName } from "./services/adminConfigService";
+import { getLegalComplianceChecklist } from "./services/legalComplianceService";
 import { TRPCError } from "@trpc/server";
 
 /** Garante que o projeto existe e pertence ao usuário antes de ler/gravar dados de um motor. */
@@ -684,6 +685,43 @@ export const appRouter = router({
           return await updateStage(stageId, projectId, ctx.user.id, rest);
         } catch (error) {
           throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Falha ao atualizar etapa" });
+        }
+      }),
+  }),
+
+  legalCompliance: router({
+    getChecklist: protectedProcedure
+      .input(
+        z.object({
+          projectId: z.number(),
+          frenteMinimaLoteM: z.number().positive().optional(),
+          declividadeTerrenoPercentual: z.number().min(0).optional(),
+          possuiCursoDagua: z.boolean().optional(),
+          faixaNonAedificandiM: z.number().min(0).optional(),
+          prazoExecucaoObrasMeses: z.number().positive().optional(),
+          infraestruturaBasica: z
+            .object({
+              drenagem: z.boolean(),
+              iluminacaoPublica: z.boolean(),
+              esgoto: z.boolean(),
+              agua: z.boolean(),
+              energia: z.boolean(),
+              vias: z.boolean(),
+            })
+            .optional(),
+          arvoresIsoladasUn: z.number().int().min(0).optional(),
+          autorizacaoArvoresIsoladasObtida: z.boolean().optional(),
+        })
+      )
+      .query(async ({ ctx, input }) => {
+        const { projectId, ...extras } = input;
+        try {
+          return await getLegalComplianceChecklist(projectId, ctx.user.id, extras);
+        } catch (error) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: error instanceof Error ? error.message : "Falha ao montar o checklist de Conformidade Legal",
+          });
         }
       }),
   }),

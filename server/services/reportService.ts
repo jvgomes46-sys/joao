@@ -9,6 +9,7 @@ import {
   getTaxEngineDataByProjectId,
 } from "../db";
 import { getDashboardData } from "./dashboardService";
+import { getLegalComplianceChecklist } from "./legalComplianceService";
 import type { FinanceMonthRow } from "../engines/financeEngine";
 import type { CostItem } from "../engines/costEngine";
 import type { AguaEnergiaOutput } from "../engines/aguaEnergiaEngine";
@@ -267,6 +268,7 @@ export async function generateOnePagerPdf(projectId: number, userId: number): Pr
  */
 export async function generateTechnicalReportPdf(projectId: number, userId: number): Promise<Buffer> {
   const { dashboard, project, geo, cost, sales, finance, tax, scenarios } = await loadFullProjectData(projectId, userId);
+  const legalCompliance = await getLegalComplianceChecklist(projectId, userId).catch(() => null);
 
   const doc = new PDFDocument({ size: "A4", margins: { top: 0, bottom: 40, left: 40, right: 40 } });
   drawHeader(doc, project.name, "Estudo de Viabilidade Técnico-Econômica (EVTE) — Relatório Completo");
@@ -291,6 +293,21 @@ export async function generateTechnicalReportPdf(projectId: number, userId: numb
     drawKeyValueRow(doc, "Eficiência Urbanística", `${Number(geo.eficienciaUrbanistica ?? 0).toFixed(1)}%`);
     drawKeyValueRow(doc, "Número de Lotes", number0(geo.numeroLotes ?? 0));
     drawKeyValueRow(doc, "Densidade", `${Number(geo.densidade ?? 0).toFixed(1)} hab/ha`);
+  }
+
+  // --- Conformidade Legal (Lei 6.766/79) ---
+  if (legalCompliance) {
+    drawSectionTitle(doc, "1b. Conformidade Legal — Lei 6.766/79");
+    doc.fontSize(8).fillColor(GRAY).text(legalCompliance.avisoPisoFederal, { width: doc.page.width - 80 });
+    doc.fillColor("#000000").moveDown(0.3);
+    const STATUS_LABELS: Record<string, string> = { ok: "OK", rever_atencao: "REVER/ATENÇÃO", nao_verificavel: "N/V" };
+    drawTable(
+      doc,
+      ["Requisito", "Regra", "Status", "Valor Atual"],
+      legalCompliance.itens.map((i) => [i.requisito, i.regra, STATUS_LABELS[i.status], i.valorAtual ?? i.observacao ?? "-"]),
+      [130, 175, 80, 105],
+      { align: ["left", "left", "left", "left"] }
+    );
   }
 
   // --- CostEngine ---
