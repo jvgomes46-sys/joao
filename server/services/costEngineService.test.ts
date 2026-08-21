@@ -85,6 +85,63 @@ describe("CostEngineService — integração com GeoEngine e Módulo de Configur
     expect(snapshotData.custosUnitarios["limpeza_destocamento"]).toBeGreaterThan(0);
   });
 
+  it("calcula o custo de aprovações sozinho (módulo 2.5) — sem nada digitado à mão", async () => {
+    await runGeoEngine(projectId, userId, { areaBruta: 100_000, modoLotes: "automatico", areaMediaLoteAlvo: 300 });
+
+    const costOutput = await runCostEngine(projectId, userId, {
+      topografia: "plana",
+      padraoPavimentacao: "asfalto",
+      solucaoEsgoto: "rede_publica",
+      solucaoAgua: "poco", // ativa a outorga de recursos hídricos
+      areaSupressaoVegetalM2: 5_000, // ativa a compensação florestal
+      tipologia: "loteamento_aberto",
+      participacaoEletrica: "cliente_paga",
+      // NOTE: custoAprovacoesTotal NÃO é informado — deve vir calculado.
+    });
+
+    // Índices da Configuração × 100.000 m² de gleba:
+    // A: (0,30 + 2,00 + 0,12) = 2,42 → 242.000
+    // B: 0,25×100k + 0,35×100k + 2.500 (outorga) = 25.000 + 35.000 + 2.500 = 62.500
+    // C: (0,80 + 0,18 + 0,10) = 1,08 → 108.000
+    // D: 5.000 + 5.000 + 95.000 (rede pública) + 0,30×100k = 135.000
+    expect(costOutput.aprovacoes.totaisPorGrupo["levantamentos"]).toBeCloseTo(242_000, 2);
+    expect(costOutput.aprovacoes.totaisPorGrupo["ambiental"]).toBeCloseTo(62_500, 2);
+    expect(costOutput.aprovacoes.totaisPorGrupo["taxas_oficiais"]).toBeCloseTo(108_000, 2);
+    expect(costOutput.aprovacoes.totaisPorGrupo["concessionarias"]).toBeCloseTo(135_000, 2);
+    expect(costOutput.aprovacoes.custoAprovacoesTotal).toBeCloseTo(547_500, 2);
+
+    // e o valor calculado entra de fato no CAPEX, não fica só informativo
+    expect(costOutput.aprovacoesValor).toBeCloseTo(547_500, 2);
+
+    const persisted = await getCostEngineDataByProjectId(projectId);
+    const detalhe = persisted!.detalhamentoAprovacoes as { custoAprovacoesTotal: number };
+    expect(detalhe.custoAprovacoesTotal).toBeCloseTo(547_500, 2);
+
+    // os índices usados entram no snapshot (auditabilidade — spec 5.3)
+    const snapshot = await getLatestConfigSnapshot(projectId, "cost_engine");
+    const snapshotData = snapshot!.snapshotData as { indicesAprovacao: Record<string, number> };
+    expect(snapshotData.indicesAprovacao.projetosEngenhariaM2).toBe(2);
+  });
+
+  it("override manual do custo de aprovações tem precedência sobre o cálculo automático", async () => {
+    await runGeoEngine(projectId, userId, { areaBruta: 100_000, modoLotes: "automatico", areaMediaLoteAlvo: 300 });
+
+    const costOutput = await runCostEngine(projectId, userId, {
+      topografia: "plana",
+      padraoPavimentacao: "asfalto",
+      solucaoEsgoto: "rede_publica",
+      solucaoAgua: "rede_publica",
+      tipologia: "loteamento_aberto",
+      participacaoEletrica: "cliente_paga",
+      custoAprovacoesTotal: 12_345,
+    });
+
+    expect(costOutput.aprovacoesValor).toBe(12_345);
+    // o cálculo automático continua disponível para comparação/auditoria
+    expect(costOutput.aprovacoes.custoAprovacoesTotal).toBeGreaterThan(0);
+    expect(costOutput.aprovacoes.custoAprovacoesTotal).not.toBe(12_345);
+  });
+
   it("respeita a densidade calculada pelo GeoEngine (dispensa de rede coletora em cascata)", async () => {
     // gleba grande e poucos lotes -> baixa densidade -> GeoEngine marca dispensaRedeColetora
     const geoOutput = await runGeoEngine(projectId, userId, {

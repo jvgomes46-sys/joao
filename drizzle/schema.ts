@@ -96,6 +96,7 @@ export const costEngineData = mysqlTable("cost_engine_data", {
   cronogramaFisico: json("cronogramaFisico"), // JSON com cronograma físico
   detalhamentoItens: json("detalhamentoItens"), // JSON com o detalhamento item a item do CostEngine (CostItem[])
   dimensionamentoAguaEnergia: json("dimensionamentoAguaEnergia"), // JSON com o dimensionamento técnico do módulo Água e Energia (spec seção 2.3): vazões, demanda de energia etc.
+  detalhamentoAprovacoes: json("detalhamentoAprovacoes"), // JSON com o detalhamento item a item do módulo 2.5 (Aprovações e Projetos): ApprovalCostOutput
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -373,7 +374,10 @@ export type InsertConfigUnitCost = typeof configUnitCosts.$inferInsert;
 export const configCostParameters = mysqlTable("config_cost_parameters", {
   id: int("id").autoincrement().primaryKey(),
   chave: varchar("chave", { length: 64 }).notNull(), // ex: "bdi_infraestrutura"
-  valor: decimal("valor", { precision: 8, scale: 4 }).notNull(), // percentual ou fator
+  // precision 15 (não 8) porque esta tabela guarda tanto percentuais/fatores
+  // (BDI 20.0000) quanto taxas fixas em R$ do módulo 2.5 (ex.: projeto
+  // hidrossanitário para ETE própria = 145000.0000), que estouram decimal(8,4).
+  valor: decimal("valor", { precision: 15, scale: 4 }).notNull(), // percentual, fator ou valor em R$
   regiao: varchar("regiao", { length: 100 }).default("Nacional").notNull(),
   dataBase: timestamp("dataBase").notNull(),
   fonte: varchar("fonte", { length: 255 }),

@@ -1,0 +1,1 @@
+ALTER TABLE `config_cost_parameters` MODIFY COLUMN `valor` decimal(15,4) NOT NULL;

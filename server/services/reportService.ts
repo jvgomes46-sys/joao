@@ -13,6 +13,14 @@ import { getLegalComplianceChecklist } from "./legalComplianceService";
 import type { FinanceMonthRow } from "../engines/financeEngine";
 import type { CostItem } from "../engines/costEngine";
 import type { AguaEnergiaOutput } from "../engines/aguaEnergiaEngine";
+import type { ApprovalCostOutput } from "../engines/approvalCostEngine";
+
+const GRUPO_APROVACAO_LABELS: Record<string, string> = {
+  levantamentos: "A. Levantamentos e Projetos",
+  ambiental: "B. Licenciamento Ambiental",
+  taxas_oficiais: "C. Taxas Oficiais",
+  concessionarias: "D. Concessionárias",
+};
 
 // Identidade visual MO Global (Manual de Diretrizes) — spec seção 2.12
 const NAVY = "#14355E";
@@ -353,6 +361,27 @@ export async function generateTechnicalReportPdf(projectId: number, userId: numb
       if (dimensionamento.custoExtensaoRedeEnergiaTotal > 0) {
         drawKeyValueRow(doc, "Custo de Extensão de Rede (energia)", currency(dimensionamento.custoExtensaoRedeEnergiaTotal));
       }
+    }
+
+    const aprovacoes = cost.detalhamentoAprovacoes as ApprovalCostOutput | null;
+    if (aprovacoes && aprovacoes.itens.length > 0) {
+      doc.moveDown(0.3);
+      doc.fontSize(10).font("Helvetica-Bold").text("Aprovações e Projetos (módulo 2.5) — calculado por m² de gleba:");
+      doc.font("Helvetica");
+      drawTable(
+        doc,
+        ["Item", "Grupo", "Índice", "Total"],
+        aprovacoes.itens.map((i) => [
+          i.descricao,
+          GRUPO_APROVACAO_LABELS[i.grupo] ?? i.grupo,
+          i.base === "area_gleba" ? `R$ ${i.indice.toFixed(2)}/m²` : "verba",
+          i.ativo ? currency(i.total) : "— zerado",
+        ]),
+        [200, 130, 90, 90],
+        { align: ["left", "left", "right", "right"] }
+      );
+      drawKeyValueRow(doc, "TOTAL DE APROVAÇÕES E PROJETOS", currency(aprovacoes.custoAprovacoesTotal));
+      drawKeyValueRow(doc, "Custo de aprovação por m² de gleba", `R$ ${aprovacoes.custoPorM2Gleba.toFixed(2)}/m²`);
     }
   }
 

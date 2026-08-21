@@ -31,6 +31,13 @@ const GRUPO_LABELS: Record<string, string> = {
   servicos_complementares: "Serviços Complementares",
 };
 
+const GRUPO_APROVACAO_LABELS: Record<string, string> = {
+  levantamentos: "A. Levantamentos e Projetos",
+  ambiental: "B. Licenciamento Ambiental",
+  taxas_oficiais: "C. Taxas Oficiais",
+  concessionarias: "D. Concessionárias",
+};
+
 const CHART_COLORS = [
   "var(--chart-1)",
   "var(--chart-2)",
@@ -350,6 +357,36 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {data.aprovacoes && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Aprovações e Projetos</CardTitle>
+            <CardDescription>
+              Calculado automaticamente pela área da gleba × índices R$/m² da Configuração (módulo 2.5) —
+              nenhum valor digitado à mão.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+              {Object.entries(data.aprovacoes.totaisPorGrupo).map(([grupo, valor]) => (
+                <div key={grupo}>
+                  <p className="text-xs text-muted-foreground">{GRUPO_APROVACAO_LABELS[grupo] ?? grupo}</p>
+                  <p className="font-semibold">{formatCurrency(valor)}</p>
+                </div>
+              ))}
+              <div>
+                <p className="text-xs text-muted-foreground">Total</p>
+                <p className="font-semibold">{formatCurrency(data.aprovacoes.custoAprovacoesTotal)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Por m² de gleba</p>
+                <p className="font-semibold">R$ {data.aprovacoes.custoPorM2Gleba.toFixed(2)}/m²</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <LegalComplianceCard projectId={projectId} />
 

@@ -46,6 +46,8 @@ export interface DashboardData {
   paybackMes: number | null;
 
   composicaoCapexPorDisciplina: ComposicaoCapexItem[];
+  /** Módulo 2.5 — custo de aprovações calculado automaticamente (null se o CostEngine é anterior a esse módulo). */
+  aprovacoes: { custoAprovacoesTotal: number; custoPorM2Gleba: number; totaisPorGrupo: Record<string, number> } | null;
   dreResumido: DreResumido;
   alertas: string[];
 
@@ -129,6 +131,14 @@ export async function getDashboardData(projectId: number, userId: number): Promi
     tirIndisponivelMotivo: finance.tirIndisponivelMotivo ?? null,
     paybackMes: finance.payback !== null ? Number(finance.payback) : null,
     composicaoCapexPorDisciplina,
+    aprovacoes: (() => {
+      const d = cost.detalhamentoAprovacoes as
+        | { custoAprovacoesTotal: number; custoPorM2Gleba: number; totaisPorGrupo: Record<string, number> }
+        | null;
+      return d
+        ? { custoAprovacoesTotal: d.custoAprovacoesTotal, custoPorM2Gleba: d.custoPorM2Gleba, totaisPorGrupo: d.totaisPorGrupo }
+        : null;
+    })(),
     dreResumido,
     alertas,
     regimeTributario: tax?.regimeTributario ?? null,

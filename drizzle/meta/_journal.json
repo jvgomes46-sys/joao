@@ -78,6 +78,20 @@
       "when": 1787339923721,
       "tag": "0010_lethal_rockslide",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1787351375666,
+      "tag": "0011_wealthy_matthew_murdock",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1787351413431,
+      "tag": "0012_icy_blockbuster",
+      "breakpoints": true
     }
   ]
 }

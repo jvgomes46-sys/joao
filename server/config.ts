@@ -1,4 +1,4 @@
-import { and, desc, eq, lte } from "drizzle-orm";
+import { and, desc, eq, inArray, lte } from "drizzle-orm";
 import {
   configCostParameters,
   configFinancialIndices,
@@ -163,6 +163,41 @@ export async function getCostParameter(chave: string, regiao = "Nacional", asOf:
     throw new Error(`[Config] Parâmetro de custo não encontrado: ${chave} (${regiao})`);
   }
   return rows[0];
+}
+
+/**
+ * Busca vários parâmetros de custo de uma vez (uma query em vez de N), já
+ * resolvendo a linha vigente de cada chave (a mais recente com dataBase <=
+ * asOf). Falha alto listando as chaves ausentes — um índice faltando faria o
+ * cálculo tratar aquele item como zero silenciosamente.
+ */
+export async function getCostParameters(
+  chaves: string[],
+  regiao = "Nacional",
+  asOf: Date = new Date()
+): Promise<Record<string, number>> {
+  const db = await getDb();
+  if (!db) throw new Error("[Config] Banco de dados não disponível");
+  if (chaves.length === 0) return {};
+
+  const rows = await db
+    .select()
+    .from(configCostParameters)
+    .where(and(inArray(configCostParameters.chave, chaves), eq(configCostParameters.regiao, regiao), lte(configCostParameters.dataBase, asOf)))
+    .orderBy(desc(configCostParameters.dataBase));
+
+  // rows vem ordenado por dataBase desc — a primeira ocorrência de cada
+  // chave é a vigente.
+  const resolved: Record<string, number> = {};
+  for (const row of rows) {
+    if (!(row.chave in resolved)) resolved[row.chave] = Number(row.valor);
+  }
+
+  const faltando = chaves.filter((c) => !(c in resolved));
+  if (faltando.length > 0) {
+    throw new Error(`[Config] Parâmetros de custo não encontrados para a região "${regiao}": ${faltando.join(", ")}`);
+  }
+  return resolved;
 }
 
 // ---------------------------------------------------------------------------

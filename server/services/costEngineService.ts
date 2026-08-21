@@ -1,6 +1,46 @@
-import { getMergedUnitCosts, getCostParameter, createConfigSnapshot, extrairUfDaLocalizacao } from "../config";
+import { getMergedUnitCosts, getCostParameter, getCostParameters, createConfigSnapshot, extrairUfDaLocalizacao } from "../config";
 import { getGeoEngineDataByProjectId, getProjectById, upsertCostEngineData } from "../db";
 import { calcularCostEngine, CostEngineInput, CostEngineOutput, UnitCostTable } from "../engines/costEngine";
+import { calcularCustoAprovacoes, type ApprovalCostIndices, type ApprovalCostOutput } from "../engines/approvalCostEngine";
+
+/** Chaves de Configuração que alimentam o módulo 2.5 (Aprovações e Projetos). */
+const CHAVES_APROVACOES = [
+  "aprovacao_topografia_m2",
+  "aprovacao_projetos_engenharia_m2",
+  "aprovacao_sondagem_m2",
+  "aprovacao_estudo_ambiental_m2",
+  "aprovacao_compensacao_florestal_m2",
+  "aprovacao_outorga_hidrica_vb",
+  "aprovacao_taxas_licenciamento_m2",
+  "aprovacao_registro_parcelamento_m2",
+  "aprovacao_assessoria_protocolos_m2",
+  "aprovacao_analise_projeto_agua_vb",
+  "aprovacao_analise_projeto_esgoto_vb",
+  "aprovacao_hidrossanitario_fossa_vb",
+  "aprovacao_hidrossanitario_ete_vb",
+  "aprovacao_hidrossanitario_rede_vb",
+  "aprovacao_participacao_eletrica_m2",
+] as const;
+
+function montarIndicesAprovacao(p: Record<string, number>): ApprovalCostIndices {
+  return {
+    topografiaM2: p["aprovacao_topografia_m2"],
+    projetosEngenhariaM2: p["aprovacao_projetos_engenharia_m2"],
+    sondagemM2: p["aprovacao_sondagem_m2"],
+    estudoAmbientalM2: p["aprovacao_estudo_ambiental_m2"],
+    compensacaoFlorestalM2: p["aprovacao_compensacao_florestal_m2"],
+    outorgaHidricaVb: p["aprovacao_outorga_hidrica_vb"],
+    taxasLicenciamentoM2: p["aprovacao_taxas_licenciamento_m2"],
+    registroParcelamentoM2: p["aprovacao_registro_parcelamento_m2"],
+    assessoriaProtocolosM2: p["aprovacao_assessoria_protocolos_m2"],
+    analiseProjetoAguaVb: p["aprovacao_analise_projeto_agua_vb"],
+    analiseProjetoEsgotoVb: p["aprovacao_analise_projeto_esgoto_vb"],
+    hidrossanitarioFossaVb: p["aprovacao_hidrossanitario_fossa_vb"],
+    hidrossanitarioEteVb: p["aprovacao_hidrossanitario_ete_vb"],
+    hidrossanitarioRedeVb: p["aprovacao_hidrossanitario_rede_vb"],
+    participacaoEletricaM2: p["aprovacao_participacao_eletrica_m2"],
+  };
+}
 
 export type CostEngineTechnicalInput = Omit<
   CostEngineInput,
@@ -9,6 +49,11 @@ export type CostEngineTechnicalInput = Omit<
   perimetroGlebaM?: number; // opcional aqui — se omitido, estimado a partir da área bruta (fallback grosseiro)
   contingenciaPercentual?: number;
   custoFinanceiroPercentual?: number;
+  /**
+   * Override manual do custo de aprovações. Se omitido (caso normal), o
+   * módulo 2.5 calcula automaticamente a partir da área da gleba × índices
+   * R$/m² da Configuração — ver `calcularCustoAprovacoes`.
+   */
   custoAprovacoesTotal?: number;
   vgvTotal?: number;
   regiao?: string; // padrão: UF detectada da localização do projeto, senão "Nacional"
@@ -30,7 +75,7 @@ export async function runCostEngine(
   projectId: number,
   userId: number,
   input: CostEngineTechnicalInput
-): Promise<CostEngineOutput> {
+): Promise<CostEngineOutput & { aprovacoes: ApprovalCostOutput }> {
   const project = await getProjectById(projectId, userId);
   if (!project) {
     throw new Error("Projeto não encontrado ou não pertence ao usuário");
@@ -78,11 +123,27 @@ export async function runCostEngine(
     dispensaRedeColetora: Number(geo.densidade) < 20,
   };
 
+  // Módulo 2.5 — custo de aprovações calculado automaticamente a partir da
+  // área da gleba × índices da Configuração. O override manual só é usado se
+  // explicitamente informado; caso contrário nada é digitado à mão.
+  const indicesAprovacao = montarIndicesAprovacao(await getCostParameters([...CHAVES_APROVACOES], "Nacional"));
+  const aprovacoes = calcularCustoAprovacoes(
+    {
+      areaGlebaM2: Number(geo.areaBruta),
+      solucaoAgua: costInput.solucaoAgua,
+      solucaoEsgoto: costInput.solucaoEsgoto,
+      areaSupressaoVegetalM2: costInput.areaSupressaoVegetalM2,
+      participacaoEletrica: costInput.participacaoEletrica,
+    },
+    indicesAprovacao
+  );
+  const aprovacoesEfetivo = custoAprovacoesTotal ?? aprovacoes.custoAprovacoesTotal;
+
   const output = calcularCostEngine(costInput, custos, {
     bdiPercentual: Number(bdiParam.valor),
     contingenciaPercentual,
     custoFinanceiroPercentual,
-    custoAprovacoesTotal,
+    custoAprovacoesTotal: aprovacoesEfetivo,
     vgvTotal,
   });
 
@@ -96,8 +157,12 @@ export async function runCostEngine(
     paisagismo: String(output.totaisPorGrupo["servicos_complementares"] ?? 0),
     portaria: String(output.totaisPorGrupo["obras_civis_condominio"] ?? 0),
     areaLazer: null,
-    licenciamento: null,
-    registro: null,
+    // Módulo 2.5 — o detalhamento auditável item a item vai em
+    // `detalhamentoAprovacoes`. Estas colunas legadas guardam só recortes que
+    // mapeiam 1:1 e NÃO se sobrepõem entre si (registro é um item dentro de
+    // taxas_oficiais, por isso taxas_oficiais não é gravado inteiro aqui).
+    licenciamento: String(aprovacoes.totaisPorGrupo["ambiental"] ?? 0),
+    registro: String(aprovacoes.itens.find((i) => i.itemCodigo === "aprovacao_registro_parcelamento")?.total ?? 0),
     cartorio: null,
     custosIndiretos: String(output.bdiValor),
     contingencias: String(output.contingenciaValor),
@@ -107,6 +172,7 @@ export async function runCostEngine(
     valorPorLote: String(output.custoPorLote),
     detalhamentoItens: output.itens,
     dimensionamentoAguaEnergia: output.dimensionamentoAguaEnergia,
+    detalhamentoAprovacoes: aprovacoes,
   });
 
   await createConfigSnapshot({
@@ -116,6 +182,7 @@ export async function runCostEngine(
       regiao,
       bdiPercentual: Number(bdiParam.valor),
       custosUnitarios: custos,
+      indicesAprovacao,
     },
     overrides: {
       contingenciaPercentual,
@@ -124,7 +191,7 @@ export async function runCostEngine(
     },
   });
 
-  return output;
+  return { ...output, aprovacoes };
 }
 
 /** Estimativa de perímetro para um lote quadrado — usado só como fallback quando o perímetro real não é informado. */

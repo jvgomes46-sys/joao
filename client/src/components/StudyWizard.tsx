@@ -129,7 +129,7 @@ const WIZARD_DATA_DEFAULTS: WizardData = {
   indiceCustosAnualFracao: "",
   recebiveisIndexados: true,
   indiceRecebiveisAnualFracao: "",
-  capexAprovacoesTotal: "0",
+  capexAprovacoesTotal: "", // vazio = calculado pelo módulo 2.5; preenchido = override manual
   curvaObra: "curva_s",
 
   regimeTributario: "",
@@ -679,7 +679,18 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
               </div>
               <div>
                 <Label htmlFor="capexAprovacoesTotal">Custo de Aprovações (R$)</Label>
-                <Input id="capexAprovacoesTotal" type="number" placeholder="0" value={data.capexAprovacoesTotal} onChange={(e) => updateData("capexAprovacoesTotal", e.target.value)} className="mt-2" />
+                <Input
+                  id="capexAprovacoesTotal"
+                  type="number"
+                  placeholder="Calculado automaticamente"
+                  value={data.capexAprovacoesTotal}
+                  onChange={(e) => updateData("capexAprovacoesTotal", e.target.value)}
+                  className="mt-2"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Deixe em branco para calcular automaticamente (área da gleba × índices R$/m² da Configuração,
+                  com os condicionais de supressão, poço e solução de esgoto). Preencha só para forçar um valor.
+                </p>
               </div>
               <div>
                 <Label htmlFor="curvaVendas">Curva de Vendas</Label>

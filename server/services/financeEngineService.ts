@@ -85,6 +85,9 @@ export async function buildFinanceEngineInput(projectId: number, input: FinanceE
   }
 
   const capexTotal = Number(cost.investimentoTotal);
+  const custoAprovacoesCalculado = Number(
+    (cost.detalhamentoAprovacoes as { custoAprovacoesTotal?: number } | null)?.custoAprovacoesTotal ?? 0
+  );
   const subtotalInfraSemBDI = GRUPOS_COST_ENGINE_PARA_FLUXO.reduce((s, campo) => s + Number(cost[campo] ?? 0), 0);
   const bdiPercentualImplicito = subtotalInfraSemBDI > 0 ? Number(cost.custosIndiretos) / subtotalInfraSemBDI : 0;
 
@@ -132,7 +135,10 @@ export async function buildFinanceEngineInput(projectId: number, input: FinanceE
     indiceCustosAnualFracao,
     recebiveisIndexados: input.recebiveisIndexados,
     indiceRecebiveisAnualFracao,
-    capexAprovacoesTotal: input.capexAprovacoesTotal ?? 0,
+    // Módulo 2.5 — reaproveita o custo de aprovações que o CostEngine já
+    // calculou e persistiu, em vez de exigir que seja digitado de novo aqui.
+    // O override explícito continua tendo precedência.
+    capexAprovacoesTotal: input.capexAprovacoesTotal ?? custoAprovacoesCalculado,
     curvaObra: input.curvaObra ?? "curva_s",
     gruposCustoObra,
     capexTotal,

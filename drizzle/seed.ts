@@ -64,6 +64,35 @@ async function main() {
     fonte: "Orçamento de Implantação — Residencial Mirante (Formosa/GO), coluna 'BDI 1' aplicada uniformemente em todos os itens",
   });
 
+  // --- Módulo 2.5: índices de Aprovações e Projetos ---
+  // Valores REAIS da Planilha Mestre de Viabilidade: índices R$/m² da aba
+  // "Tabelas" seção M (linhas 94-102) e taxas fixas da aba "Aprovações"
+  // (B.3, D.1-D.3). Com estes, o custo de aprovações deixa de ser digitado
+  // à mão no wizard e passa a ser calculado a partir da área da gleba.
+  const FONTE_APROVACOES = "Planilha Mestre de Viabilidade — aba Tabelas, seção M (Índices de aprovação por m² de gleba)";
+  const FONTE_APROVACOES_FIXA = "Planilha Mestre de Viabilidade — aba Aprovações (taxas fixas de concessionária/órgão)";
+  await db.insert(configCostParameters).values([
+    // Grupo A — Levantamentos e Projetos (R$/m² de gleba)
+    { chave: "aprovacao_topografia_m2", valor: "0.3000", regiao: "Nacional", dataBase: now, fonte: `${FONTE_APROVACOES} — B94 (levantamento planialtimétrico)` },
+    { chave: "aprovacao_projetos_engenharia_m2", valor: "2.0000", regiao: "Nacional", dataBase: now, fonte: `${FONTE_APROVACOES} — B95 (urbanístico, terraplenagem, redes)` },
+    { chave: "aprovacao_sondagem_m2", valor: "0.1200", regiao: "Nacional", dataBase: now, fonte: `${FONTE_APROVACOES} — B97 (furos e ensaios)` },
+    // Grupo B — Licenciamento Ambiental
+    { chave: "aprovacao_estudo_ambiental_m2", valor: "0.2500", regiao: "Nacional", dataBase: now, fonte: `${FONTE_APROVACOES} — B98 (consultoria ambiental)` },
+    { chave: "aprovacao_compensacao_florestal_m2", valor: "0.3500", regiao: "Nacional", dataBase: now, fonte: `${FONTE_APROVACOES} — B101 (condicional: só com supressão)` },
+    { chave: "aprovacao_outorga_hidrica_vb", valor: "2500.0000", regiao: "Nacional", dataBase: now, fonte: `${FONTE_APROVACOES_FIXA} — B.3 (condicional: só se água por poço)` },
+    // Grupo C — Taxas Oficiais (R$/m² de gleba)
+    { chave: "aprovacao_taxas_licenciamento_m2", valor: "0.8000", regiao: "Nacional", dataBase: now, fonte: `${FONTE_APROVACOES} — B96 (SEMAD/Prefeitura)` },
+    { chave: "aprovacao_registro_parcelamento_m2", valor: "0.1800", regiao: "Nacional", dataBase: now, fonte: `${FONTE_APROVACOES} — B100 (emolumentos cartorários do CRI)` },
+    { chave: "aprovacao_assessoria_protocolos_m2", valor: "0.1000", regiao: "Nacional", dataBase: now, fonte: `${FONTE_APROVACOES} — B99 (acompanhamento de processo)` },
+    // Grupo D — Concessionárias
+    { chave: "aprovacao_analise_projeto_agua_vb", valor: "5000.0000", regiao: "Nacional", dataBase: now, fonte: `${FONTE_APROVACOES_FIXA} — D.1 (análise SAA)` },
+    { chave: "aprovacao_analise_projeto_esgoto_vb", valor: "5000.0000", regiao: "Nacional", dataBase: now, fonte: `${FONTE_APROVACOES_FIXA} — D.2 (análise SES, dispensada na fossa)` },
+    { chave: "aprovacao_hidrossanitario_fossa_vb", valor: "22000.0000", regiao: "Nacional", dataBase: now, fonte: `${FONTE_APROVACOES_FIXA} — D.3 (escopo reduzido: fossa)` },
+    { chave: "aprovacao_hidrossanitario_ete_vb", valor: "145000.0000", regiao: "Nacional", dataBase: now, fonte: `${FONTE_APROVACOES_FIXA} — D.3 (escopo ampliado: ETE própria)` },
+    { chave: "aprovacao_hidrossanitario_rede_vb", valor: "95000.0000", regiao: "Nacional", dataBase: now, fonte: `${FONTE_APROVACOES_FIXA} — D.3 (escopo padrão: rede pública)` },
+    { chave: "aprovacao_participacao_eletrica_m2", valor: "0.3000", regiao: "Nacional", dataBase: now, fonte: `${FONTE_APROVACOES} — B102 (extensão até o ponto de entrega)` },
+  ]);
+
   // --- D. Matriz de Tipologia ---
   // Valores reais extraídos de Tabelas!A72:E76 da Planilha Mestre de
   // Viabilidade (aba "J. MATRIZ DE TIPOLOGIA — base do PROCV"), não mais
