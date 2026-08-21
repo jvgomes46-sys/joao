@@ -173,6 +173,20 @@ export async function runCostEngine(
     detalhamentoItens: output.itens,
     dimensionamentoAguaEnergia: output.dimensionamentoAguaEnergia,
     detalhamentoAprovacoes: aprovacoes,
+    // Premissas que geraram este orçamento — auditabilidade, e são a fonte
+    // dos gatilhos de prazo de aprovação usados depois pelo FinanceEngine.
+    premissasTecnicas: {
+      tipologia: costInput.tipologia,
+      topografia: costInput.topografia,
+      padraoPavimentacao: costInput.padraoPavimentacao,
+      solucaoAgua: costInput.solucaoAgua,
+      solucaoEsgoto: costInput.solucaoEsgoto,
+      necessitaElevatoria: costInput.necessitaElevatoria ?? false,
+      participacaoEletrica: costInput.participacaoEletrica,
+      areaSupressaoVegetalM2: costInput.areaSupressaoVegetalM2 ?? 0,
+      arvoresIsoladasUn: costInput.arvoresIsoladasUn ?? 0,
+      isChacara: costInput.isChacara ?? false,
+    },
   });
 
   await createConfigSnapshot({

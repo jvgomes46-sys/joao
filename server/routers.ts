@@ -357,7 +357,7 @@ export const appRouter = router({
       .input(
         z.object({
           projectId: z.number(),
-          duracaoAprovacoesMeses: z.number().positive(),
+          duracaoAprovacoesMeses: z.number().positive().optional(), // omitido = derivado da Configuração (base + adicionais por gatilho)
           inicioVendasMes: z.number().int().positive(),
           precoBrutoPorLote: z.number().positive(),
           prazoVendasMeses: z.number().positive(),
@@ -449,7 +449,7 @@ export const appRouter = router({
       .input(
         z.object({
           projectId: z.number(),
-          duracaoAprovacoesMeses: z.number().positive(),
+          duracaoAprovacoesMeses: z.number().positive().optional(), // omitido = derivado da Configuração (base + adicionais por gatilho)
           inicioVendasMes: z.number().int().positive(),
           precoBrutoPorLote: z.number().positive(),
           prazoVendasMeses: z.number().positive(),

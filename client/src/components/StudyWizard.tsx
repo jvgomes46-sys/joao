@@ -118,7 +118,7 @@ const WIZARD_DATA_DEFAULTS: WizardData = {
   inadimplenciaPercentual: "5",
   despesasAdministrativasPercentual: "4",
 
-  duracaoAprovacoesMeses: "12",
+  duracaoAprovacoesMeses: "", // vazio = derivado da Configuração (base + adicionais por gatilho)
   inicioVendasMes: "6",
   curvaVendas: "curva_s",
   percentualEntrada: "20",
@@ -212,9 +212,6 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
         return null;
       case "finance":
         if (!data.tmaAnual || Number(data.tmaAnual) <= 0) return "Preencha a Taxa Mínima de Atratividade (% a.a.)";
-        if (!data.duracaoAprovacoesMeses || Number(data.duracaoAprovacoesMeses) <= 0) {
-          return "Preencha a duração das aprovações (meses)";
-        }
         if (!data.inicioVendasMes || Number(data.inicioVendasMes) <= 0) return "Preencha o mês de início das vendas";
         return null;
       case "tax":
@@ -327,7 +324,7 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
       // usa o preço/prazo de vendas que o SalesEngine acabou de calcular (não redigitado).
       await calculateFinanceEngineMutation.mutateAsync({
         projectId: project.id,
-        duracaoAprovacoesMeses: Number(data.duracaoAprovacoesMeses),
+        duracaoAprovacoesMeses: data.duracaoAprovacoesMeses ? Number(data.duracaoAprovacoesMeses) : undefined,
         inicioVendasMes: Number(data.inicioVendasMes),
         precoBrutoPorLote: salesOutput.precoBrutoPorLote,
         prazoVendasMeses: salesOutput.prazoVendasMeses,
@@ -670,8 +667,19 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
                 <Input id="tmaAnual" type="number" placeholder="14" value={data.tmaAnual} onChange={(e) => updateData("tmaAnual", e.target.value)} className="mt-2" />
               </div>
               <div>
-                <Label htmlFor="duracaoAprovacoesMeses">Prazo de Aprovações (meses) *</Label>
-                <Input id="duracaoAprovacoesMeses" type="number" placeholder="12" value={data.duracaoAprovacoesMeses} onChange={(e) => updateData("duracaoAprovacoesMeses", e.target.value)} className="mt-2" />
+                <Label htmlFor="duracaoAprovacoesMeses">Prazo de Aprovações (meses)</Label>
+                <Input
+                  id="duracaoAprovacoesMeses"
+                  type="number"
+                  placeholder="Calculado automaticamente"
+                  value={data.duracaoAprovacoesMeses}
+                  onChange={(e) => updateData("duracaoAprovacoesMeses", e.target.value)}
+                  className="mt-2"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Deixe em branco para usar o prazo da Configuração: prazo base + adicionais por gatilho
+                  (ETE própria, supressão vegetal, condomínio fechado).
+                </p>
               </div>
               <div>
                 <Label htmlFor="inicioVendasMes">Início das Vendas (mês) *</Label>

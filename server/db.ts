@@ -289,6 +289,7 @@ const costEngineAccessors = createEngineDataAccessors<typeof costEngineData, any
   "detalhamentoItens",
   "dimensionamentoAguaEnergia",
   "detalhamentoAprovacoes",
+  "premissasTecnicas",
 ]);
 export const getCostEngineDataByProjectId = costEngineAccessors.getByProjectId;
 export async function upsertCostEngineData(projectId: number, data: Omit<InsertCostEngineData, "projectId" | "id">) {

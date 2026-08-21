@@ -10,6 +10,7 @@ import {
 } from "../db";
 import { getDashboardData } from "./dashboardService";
 import { getLegalComplianceChecklist } from "./legalComplianceService";
+import { getLatestConfigSnapshot } from "../config";
 import type { FinanceMonthRow } from "../engines/financeEngine";
 import type { CostItem } from "../engines/costEngine";
 import type { AguaEnergiaOutput } from "../engines/aguaEnergiaEngine";
@@ -277,6 +278,11 @@ export async function generateOnePagerPdf(projectId: number, userId: number): Pr
 export async function generateTechnicalReportPdf(projectId: number, userId: number): Promise<Buffer> {
   const { dashboard, project, geo, cost, sales, finance, tax, scenarios } = await loadFullProjectData(projectId, userId);
   const legalCompliance = await getLegalComplianceChecklist(projectId, userId).catch(() => null);
+  const financeSnapshot = await getLatestConfigSnapshot(projectId, "finance_engine").catch(() => undefined);
+  const cronograma = (financeSnapshot?.snapshotData as {
+    prazoAprovacao?: { prazoBaseMeses: number; adicionaisAplicados: { gatilho: string; meses: number }[]; prazoTotalMeses: number };
+    duracaoObraMeses?: number;
+  } | null) ?? null;
 
   const doc = new PDFDocument({ size: "A4", margins: { top: 0, bottom: 40, left: 40, right: 40 } });
   drawHeader(doc, project.name, "Estudo de Viabilidade Técnico-Econômica (EVTE) — Relatório Completo");
@@ -411,6 +417,17 @@ export async function generateTechnicalReportPdf(projectId: number, userId: numb
     drawKeyValueRow(doc, "Lucro Total", currency(Number(finance.lucroTotal ?? 0)));
     drawKeyValueRow(doc, "Margem de Lucro", `${Number(finance.margemLucro ?? 0).toFixed(1)}%`);
     drawKeyValueRow(doc, "TMA Utilizada", `${Number(finance.tmaUtilizada ?? 0).toFixed(1)}% a.a.`);
+
+    if (cronograma?.prazoAprovacao) {
+      const p = cronograma.prazoAprovacao;
+      const adicionais = p.adicionaisAplicados.length
+        ? p.adicionaisAplicados.map((a) => `${a.gatilho.replace(/_/g, " ")} +${a.meses}m`).join(", ")
+        : "nenhum gatilho";
+      drawKeyValueRow(doc, "Prazo de Aprovações (derivado)", `${p.prazoTotalMeses} meses (base ${p.prazoBaseMeses}m · ${adicionais})`);
+    }
+    if (cronograma?.duracaoObraMeses) {
+      drawKeyValueRow(doc, "Prazo de Obra (por porte da gleba)", `${cronograma.duracaoObraMeses} meses`);
+    }
 
     const fluxo = (finance.fluxoCaixaMensal as FinanceMonthRow[] | null) ?? [];
     if (fluxo.length > 0) {

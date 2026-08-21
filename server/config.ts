@@ -369,7 +369,11 @@ export async function getLatestConfigSnapshot(projectId: number, engine: InsertC
     .select()
     .from(configSnapshots)
     .where(and(eq(configSnapshots.projectId, projectId), eq(configSnapshots.engine, engine)))
-    .orderBy(desc(configSnapshots.calculatedAt))
+    // Desempate por id: `calculatedAt` é timestamp com precisão de segundos,
+    // então dois snapshots gravados no mesmo segundo (o wizard roda 5 motores
+    // em sequência, e recalcular é rápido) empatariam e a ordenação viraria
+    // arbitrária — devolvendo um snapshot antigo como se fosse o vigente.
+    .orderBy(desc(configSnapshots.calculatedAt), desc(configSnapshots.id))
     .limit(1);
 
   if (rows.length === 0) return undefined;
@@ -380,6 +384,6 @@ export async function listConfigSnapshots(projectId: number) {
   const db = await getDb();
   if (!db) throw new Error("[Config] Banco de dados não disponível");
 
-  const rows = await db.select().from(configSnapshots).where(eq(configSnapshots.projectId, projectId)).orderBy(desc(configSnapshots.calculatedAt));
+  const rows = await db.select().from(configSnapshots).where(eq(configSnapshots.projectId, projectId)).orderBy(desc(configSnapshots.calculatedAt), desc(configSnapshots.id));
   return rows.map((r) => ({ ...r, snapshotData: parseJsonColumn(r.snapshotData), overrides: parseJsonColumn(r.overrides) }));
 }

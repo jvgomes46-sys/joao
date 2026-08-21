@@ -1,10 +1,15 @@
-import { createConfigSnapshot, getFinancialIndex, getPrazoObraPorPorte } from "../config";
+import { createConfigSnapshot, getFinancialIndex, getPrazoAprovacao, getPrazoObraPorPorte } from "../config";
 import { getCostEngineDataByProjectId, getGeoEngineDataByProjectId, getProjectById, upsertFinanceEngineData } from "../db";
 import { calcularFinanceEngine, CurvaObra, CurvaVendas, FinanceEngineInput, FinanceEngineOutput } from "../engines/financeEngine";
 
 export interface FinanceEngineServiceInput {
   // Cronograma (Premissas — módulo 2.1)
-  duracaoAprovacoesMeses: number;
+  /**
+   * Duração das aprovações em meses. Se omitido, é derivado da Configuração:
+   * prazo base + adicionais por gatilho (ETE própria, supressão vegetal,
+   * condomínio fechado), lidos das premissas técnicas do CostEngine.
+   */
+  duracaoAprovacoesMeses?: number;
   inicioVendasMes: number;
 
   // Comercial
@@ -27,7 +32,7 @@ export interface FinanceEngineServiceInput {
   recebiveisIndexados?: boolean;
   indiceRecebiveisAnualFracao?: number;
 
-  // Aprovações — módulo 2.5 ainda não existe; valor informado explicitamente
+  // Aprovações — módulo 2.5 calcula automaticamente; este é override manual
   capexAprovacoesTotal?: number;
   curvaObra?: CurvaObra; // padrão: "curva_s"
 
@@ -61,6 +66,8 @@ export interface FinanceEngineBaseBuild {
   bdiPercentualImplicito: number;
   indiceCustosAnualFracao: number | undefined;
   indiceRecebiveisAnualFracao: number | undefined;
+  /** Composição do prazo de aprovações derivado da Configuração (base + adicionais por gatilho). */
+  prazoAprovacao: { prazoBaseMeses: number; adicionaisAplicados: { gatilho: string; meses: number }[]; prazoTotalMeses: number };
 }
 
 /**
@@ -117,9 +124,23 @@ export async function buildFinanceEngineInput(projectId: number, input: FinanceE
   const prazoObra = await getPrazoObraPorPorte(Number(geo.areaBruta));
   const duracaoObraMeses = prazoObra.prazoMeses;
 
+  // Prazo de aprovações: se não vier explícito, deriva da Configuração —
+  // prazo base + adicionais por gatilho, lidos das premissas técnicas que o
+  // CostEngine persistiu (ETE própria, supressão vegetal, condomínio fechado).
+  const premissas = cost.premissasTecnicas as
+    | { solucaoEsgoto?: string; areaSupressaoVegetalM2?: number; tipologia?: string }
+    | null;
+  const gatilhosAprovacao: string[] = [];
+  if (premissas?.solucaoEsgoto === "ete_propria") gatilhosAprovacao.push("ete_propria");
+  if ((premissas?.areaSupressaoVegetalM2 ?? 0) > 0) gatilhosAprovacao.push("supressao_vegetal");
+  if (premissas?.tipologia === "condominio_fechado") gatilhosAprovacao.push("condominio_fechado");
+
+  const prazoAprovacao = await getPrazoAprovacao(gatilhosAprovacao);
+  const duracaoAprovacoesMeses = input.duracaoAprovacoesMeses ?? prazoAprovacao.prazoTotalMeses;
+
   const financeInput: FinanceEngineInput = {
     horizonteMeses: input.horizonteMeses,
-    duracaoAprovacoesMeses: input.duracaoAprovacoesMeses,
+    duracaoAprovacoesMeses,
     duracaoObraMeses,
     inicioVendasMes: input.inicioVendasMes,
     numeroLotes: geo.numeroLotes,
@@ -144,7 +165,7 @@ export async function buildFinanceEngineInput(projectId: number, input: FinanceE
     capexTotal,
   };
 
-  return { financeInput, bdiPercentualImplicito, indiceCustosAnualFracao, indiceRecebiveisAnualFracao };
+  return { financeInput, bdiPercentualImplicito, indiceCustosAnualFracao, indiceRecebiveisAnualFracao, prazoAprovacao };
 }
 
 /**
@@ -167,10 +188,8 @@ export async function runFinanceEngine(projectId: number, userId: number, input:
     throw new Error("Projeto não encontrado ou não pertence ao usuário");
   }
 
-  const { financeInput, bdiPercentualImplicito, indiceCustosAnualFracao, indiceRecebiveisAnualFracao } = await buildFinanceEngineInput(
-    projectId,
-    input
-  );
+  const { financeInput, bdiPercentualImplicito, indiceCustosAnualFracao, indiceRecebiveisAnualFracao, prazoAprovacao } =
+    await buildFinanceEngineInput(projectId, input);
 
   const output = calcularFinanceEngine(financeInput);
 
@@ -196,9 +215,12 @@ export async function runFinanceEngine(projectId: number, userId: number, input:
       indiceCustosAnualFracao: indiceCustosAnualFracao ?? null,
       indiceRecebiveisAnualFracao: indiceRecebiveisAnualFracao ?? null,
       bdiPercentualImplicito,
+      prazoAprovacao,
+      duracaoObraMeses: financeInput.duracaoObraMeses,
     },
     overrides: {
       capexAprovacoesTotal: input.capexAprovacoesTotal,
+      duracaoAprovacoesMeses: input.duracaoAprovacoesMeses,
       curvaObra: input.curvaObra,
     },
   });

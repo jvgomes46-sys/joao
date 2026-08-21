@@ -97,6 +97,7 @@ export const costEngineData = mysqlTable("cost_engine_data", {
   detalhamentoItens: json("detalhamentoItens"), // JSON com o detalhamento item a item do CostEngine (CostItem[])
   dimensionamentoAguaEnergia: json("dimensionamentoAguaEnergia"), // JSON com o dimensionamento técnico do módulo Água e Energia (spec seção 2.3): vazões, demanda de energia etc.
   detalhamentoAprovacoes: json("detalhamentoAprovacoes"), // JSON com o detalhamento item a item do módulo 2.5 (Aprovações e Projetos): ApprovalCostOutput
+  premissasTecnicas: json("premissasTecnicas"), // JSON com as premissas técnicas usadas (tipologia, solução de água/esgoto, topografia, supressão...) — auditabilidade e gatilhos de prazo de aprovação
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
