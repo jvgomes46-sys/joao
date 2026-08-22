@@ -64,6 +64,25 @@ async function main() {
     fonte: "Orçamento de Implantação — Residencial Mirante (Formosa/GO), coluna 'BDI 1' aplicada uniformemente em todos os itens",
   });
 
+  // --- Contingência e custo financeiro ---
+  // Valores REAIS da Planilha Mestre (Premissas!B74 = 5%, B75 = 6%).
+  await db.insert(configCostParameters).values([
+    {
+      chave: "contingencia_obra_percentual",
+      valor: "5.0000",
+      regiao: "Nacional",
+      dataBase: now,
+      fonte: "Planilha Mestre de Viabilidade — Premissas!B74 (Contingência sobre a obra)",
+    },
+    {
+      chave: "custo_financeiro_infra_percentual",
+      valor: "6.0000",
+      regiao: "Nacional",
+      dataBase: now,
+      fonte: "Planilha Mestre de Viabilidade — Premissas!B75 (Custo financeiro % s/ infra)",
+    },
+  ]);
+
   // --- Módulo 2.5: índices de Aprovações e Projetos ---
   // Valores REAIS da Planilha Mestre de Viabilidade: índices R$/m² da aba
   // "Tabelas" seção M (linhas 94-102) e taxas fixas da aba "Aprovações"
@@ -116,6 +135,11 @@ async function main() {
     { tipo: "prazo_aprovacao_adicional", gatilho: "ete_propria", prazoMeses: 6, regiao: "Nacional" },
     { tipo: "prazo_aprovacao_adicional", gatilho: "supressao_vegetal", prazoMeses: 6, regiao: "Nacional" },
     { tipo: "prazo_aprovacao_adicional", gatilho: "condominio_fechado", prazoMeses: 3, regiao: "Nacional" },
+    // Valor REAL da Planilha Mestre (Premissas!B73 = mês 6). Note que na
+    // planilha as vendas começam ANTES do fim das aprovações (18 meses) —
+    // pré-lançamento é prática normal, então este valor não é derivado do
+    // prazo de aprovações.
+    { tipo: "inicio_vendas_mes_padrao", prazoMeses: 6, regiao: "Nacional" },
   ]);
 
   // --- C. Índices financeiros ---

@@ -436,7 +436,12 @@ export type InsertConfigTypologyMatrix = typeof configTypologyMatrix.$inferInser
  */
 export const configStandardTimelines = mysqlTable("config_standard_timelines", {
   id: int("id").autoincrement().primaryKey(),
-  tipo: mysqlEnum("tipo", ["prazo_obra_por_porte", "prazo_aprovacao_base", "prazo_aprovacao_adicional"]).notNull(),
+  tipo: mysqlEnum("tipo", [
+    "prazo_obra_por_porte",
+    "prazo_aprovacao_base",
+    "prazo_aprovacao_adicional",
+    "inicio_vendas_mes_padrao", // mês em que as vendas começam por padrão (pode ser durante as aprovações — pré-lançamento)
+  ]).notNull(),
   // Para prazo_obra_por_porte: faixa de área da gleba (m²) que este prazo cobre
   faixaPorteMin: decimal("faixaPorteMin", { precision: 12, scale: 2 }),
   faixaPorteMax: decimal("faixaPorteMax", { precision: 12, scale: 2 }),

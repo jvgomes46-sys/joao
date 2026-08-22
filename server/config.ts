@@ -308,6 +308,28 @@ export async function getPrazoObraPorPorte(areaGlebaM2: number, regiao = "Nacion
 }
 
 /** Prazo de aprovação = base + soma dos adicionais cujo gatilho está ativo. */
+/**
+ * Mês padrão de início das vendas. Vem da Configuração e NÃO é derivado do
+ * prazo de aprovações: na planilha mestre as vendas começam no mês 6 com
+ * aprovações de 18 meses — pré-lançamento durante o licenciamento é prática
+ * normal, então amarrar um ao outro estaria errado.
+ */
+export async function getInicioVendasMesPadrao(regiao = "Nacional"): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("[Config] Banco de dados não disponível");
+
+  const rows = await db
+    .select()
+    .from(configStandardTimelines)
+    .where(and(eq(configStandardTimelines.tipo, "inicio_vendas_mes_padrao"), eq(configStandardTimelines.regiao, regiao)))
+    .limit(1);
+
+  if (rows.length === 0) {
+    throw new Error(`[Config] Mês padrão de início das vendas não configurado para ${regiao}`);
+  }
+  return rows[0].prazoMeses;
+}
+
 export async function getPrazoAprovacao(gatilhosAtivos: string[], regiao = "Nacional") {
   const db = await getDb();
   if (!db) throw new Error("[Config] Banco de dados não disponível");

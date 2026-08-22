@@ -252,8 +252,8 @@ export const appRouter = router({
           demandaReferenciaKvaPorLote: z.number().positive().optional(),
           distanciaConexaoEnergiaM: z.number().min(0).optional(),
           custoExtensaoRedeRsPorM: z.number().min(0).optional(),
-          contingenciaPercentual: z.number().min(0).max(100).optional(),
-          custoFinanceiroPercentual: z.number().min(0).max(100).optional(),
+          contingenciaPercentual: z.number().min(0).max(100).optional(), // omitido = valor vigente da Configuração
+          custoFinanceiroPercentual: z.number().min(0).max(100).optional(), // omitido = valor vigente da Configuração
           custoAprovacoesTotal: z.number().min(0).optional(),
           vgvTotal: z.number().min(0).optional(),
           regiao: z.string().optional(),
@@ -360,7 +360,7 @@ export const appRouter = router({
         z.object({
           projectId: z.number(),
           duracaoAprovacoesMeses: z.number().positive().optional(), // omitido = derivado da Configuração (base + adicionais por gatilho)
-          inicioVendasMes: z.number().int().positive(),
+          inicioVendasMes: z.number().int().positive().optional(), // omitido = padrão da Configuração
           precoBrutoPorLote: z.number().positive(),
           prazoVendasMeses: z.number().positive(),
           curvaVendas: z.enum(["constante", "rampa", "curva_s"]),
@@ -452,7 +452,7 @@ export const appRouter = router({
         z.object({
           projectId: z.number(),
           duracaoAprovacoesMeses: z.number().positive().optional(), // omitido = derivado da Configuração (base + adicionais por gatilho)
-          inicioVendasMes: z.number().int().positive(),
+          inicioVendasMes: z.number().int().positive().optional(), // omitido = padrão da Configuração
           precoBrutoPorLote: z.number().positive(),
           prazoVendasMeses: z.number().positive(),
           curvaVendas: z.enum(["constante", "rampa", "curva_s"]),

@@ -123,6 +123,33 @@ describe("CostEngineService — integração com GeoEngine e Módulo de Configur
     expect(snapshotData.indicesAprovacao.projetosEngenhariaM2).toBe(2);
   });
 
+  it("contingência e custo financeiro vêm da Configuração quando omitidos", async () => {
+    await runGeoEngine(projectId, userId, { areaBruta: 100_000, modoLotes: "automatico", areaMediaLoteAlvo: 300 });
+    const out = await runCostEngine(projectId, userId, {
+      topografia: "plana", padraoPavimentacao: "asfalto", solucaoEsgoto: "rede_publica", solucaoAgua: "rede_publica",
+      tipologia: "loteamento_aberto", participacaoEletrica: "concessionaria_cobre",
+      // contingenciaPercentual e custoFinanceiroPercentual omitidos de propósito
+    });
+
+    // valores vigentes da Configuração (Planilha Mestre: 5% e 6%)
+    expect(out.contingenciaValor).toBeCloseTo(out.subtotalComBDI * 0.05, 2);
+
+    const snap = await getLatestConfigSnapshot(projectId, "cost_engine");
+    const d = snap!.snapshotData as { contingenciaPercentual: number; custoFinanceiroPercentual: number };
+    expect(d.contingenciaPercentual).toBe(5);
+    expect(d.custoFinanceiroPercentual).toBe(6);
+  });
+
+  it("contingência informada tem precedência sobre a Configuração", async () => {
+    await runGeoEngine(projectId, userId, { areaBruta: 100_000, modoLotes: "automatico", areaMediaLoteAlvo: 300 });
+    const out = await runCostEngine(projectId, userId, {
+      topografia: "plana", padraoPavimentacao: "asfalto", solucaoEsgoto: "rede_publica", solucaoAgua: "rede_publica",
+      tipologia: "loteamento_aberto", participacaoEletrica: "concessionaria_cobre",
+      contingenciaPercentual: 12,
+    });
+    expect(out.contingenciaValor).toBeCloseTo(out.subtotalComBDI * 0.12, 2);
+  });
+
   it("override manual do custo de aprovações tem precedência sobre o cálculo automático", async () => {
     await runGeoEngine(projectId, userId, { areaBruta: 100_000, modoLotes: "automatico", areaMediaLoteAlvo: 300 });
 

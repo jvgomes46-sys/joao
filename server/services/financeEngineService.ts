@@ -1,4 +1,4 @@
-import { createConfigSnapshot, getFinancialIndex, getPrazoAprovacao, getPrazoObraPorPorte } from "../config";
+import { createConfigSnapshot, getFinancialIndex, getInicioVendasMesPadrao, getPrazoAprovacao, getPrazoObraPorPorte } from "../config";
 import { getCostEngineDataByProjectId, getGeoEngineDataByProjectId, getProjectById, upsertFinanceEngineData } from "../db";
 import { calcularFinanceEngine, CurvaObra, CurvaVendas, FinanceEngineInput, FinanceEngineOutput } from "../engines/financeEngine";
 
@@ -10,7 +10,13 @@ export interface FinanceEngineServiceInput {
    * condomínio fechado), lidos das premissas técnicas do CostEngine.
    */
   duracaoAprovacoesMeses?: number;
-  inicioVendasMes: number;
+  /**
+   * Mês de início das vendas. Se omitido, usa o padrão da Configuração.
+   * NÃO é derivado do prazo de aprovações de propósito: pré-lançamento
+   * durante o licenciamento é prática normal (na planilha mestre as vendas
+   * começam no mês 6 com aprovações de 18 meses).
+   */
+  inicioVendasMes?: number;
 
   // Comercial
   precoBrutoPorLote: number; // R$ — do SalesEngine (VGV/lotes ou preço médio × área)
@@ -68,6 +74,8 @@ export interface FinanceEngineBaseBuild {
   indiceRecebiveisAnualFracao: number | undefined;
   /** Composição do prazo de aprovações derivado da Configuração (base + adicionais por gatilho). */
   prazoAprovacao: { prazoBaseMeses: number; adicionaisAplicados: { gatilho: string; meses: number }[]; prazoTotalMeses: number };
+  /** Mês padrão de início das vendas vindo da Configuração (antes de qualquer override). */
+  inicioVendasMesPadrao: number;
 }
 
 /**
@@ -137,12 +145,14 @@ export async function buildFinanceEngineInput(projectId: number, input: FinanceE
 
   const prazoAprovacao = await getPrazoAprovacao(gatilhosAprovacao);
   const duracaoAprovacoesMeses = input.duracaoAprovacoesMeses ?? prazoAprovacao.prazoTotalMeses;
+  const inicioVendasMesPadrao = await getInicioVendasMesPadrao();
+  const inicioVendasMes = input.inicioVendasMes ?? inicioVendasMesPadrao;
 
   const financeInput: FinanceEngineInput = {
     horizonteMeses: input.horizonteMeses,
     duracaoAprovacoesMeses,
     duracaoObraMeses,
-    inicioVendasMes: input.inicioVendasMes,
+    inicioVendasMes,
     numeroLotes: geo.numeroLotes,
     precoBrutoPorLote: input.precoBrutoPorLote,
     prazoVendasMeses: input.prazoVendasMeses,
@@ -165,7 +175,7 @@ export async function buildFinanceEngineInput(projectId: number, input: FinanceE
     capexTotal,
   };
 
-  return { financeInput, bdiPercentualImplicito, indiceCustosAnualFracao, indiceRecebiveisAnualFracao, prazoAprovacao };
+  return { financeInput, bdiPercentualImplicito, indiceCustosAnualFracao, indiceRecebiveisAnualFracao, prazoAprovacao, inicioVendasMesPadrao };
 }
 
 /**
@@ -188,7 +198,7 @@ export async function runFinanceEngine(projectId: number, userId: number, input:
     throw new Error("Projeto não encontrado ou não pertence ao usuário");
   }
 
-  const { financeInput, bdiPercentualImplicito, indiceCustosAnualFracao, indiceRecebiveisAnualFracao, prazoAprovacao } =
+  const { financeInput, bdiPercentualImplicito, indiceCustosAnualFracao, indiceRecebiveisAnualFracao, prazoAprovacao, inicioVendasMesPadrao } =
     await buildFinanceEngineInput(projectId, input);
 
   const output = calcularFinanceEngine(financeInput);
@@ -217,10 +227,12 @@ export async function runFinanceEngine(projectId: number, userId: number, input:
       bdiPercentualImplicito,
       prazoAprovacao,
       duracaoObraMeses: financeInput.duracaoObraMeses,
+      inicioVendasMesPadrao,
     },
     overrides: {
       capexAprovacoesTotal: input.capexAprovacoesTotal,
       duracaoAprovacoesMeses: input.duracaoAprovacoesMeses,
+      inicioVendasMes: input.inicioVendasMes,
       curvaObra: input.curvaObra,
     },
   });

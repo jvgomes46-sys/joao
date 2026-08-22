@@ -107,6 +107,15 @@ export async function runCostEngine(
   // específicas podem futuramente ter sua própria linha em config_cost_parameters.
   const bdiParam = await getCostParameter("bdi_infraestrutura", "Nacional");
 
+  // Contingência e custo financeiro: omitidos = valor vigente da Configuração
+  // (hoje 5% e 6%, da Planilha Mestre); informados = premissa deste projeto.
+  const percentuaisObra = await getCostParameters(
+    ["contingencia_obra_percentual", "custo_financeiro_infra_percentual"],
+    "Nacional"
+  );
+  const contingenciaEfetiva = contingenciaPercentual ?? percentuaisObra["contingencia_obra_percentual"];
+  const custoFinanceiroEfetivo = custoFinanceiroPercentual ?? percentuaisObra["custo_financeiro_infra_percentual"];
+
   const indicesUrbanisticos = geo.indicesUrbanisticos as { percentualCalcadas?: number } | null;
   const areaParcelavel = Number(geo.areaLiquida ?? geo.areaBruta);
   const areaCalcadasM2 = ((indicesUrbanisticos?.percentualCalcadas ?? 0) / 100) * areaParcelavel;
@@ -141,8 +150,8 @@ export async function runCostEngine(
 
   const output = calcularCostEngine(costInput, custos, {
     bdiPercentual: Number(bdiParam.valor),
-    contingenciaPercentual,
-    custoFinanceiroPercentual,
+    contingenciaPercentual: contingenciaEfetiva,
+    custoFinanceiroPercentual: custoFinanceiroEfetivo,
     custoAprovacoesTotal: aprovacoesEfetivo,
     vgvTotal,
   });
@@ -197,6 +206,8 @@ export async function runCostEngine(
       bdiPercentual: Number(bdiParam.valor),
       custosUnitarios: custos,
       indicesAprovacao,
+      contingenciaPercentual: contingenciaEfetiva,
+      custoFinanceiroPercentual: custoFinanceiroEfetivo,
     },
     overrides: {
       contingenciaPercentual,

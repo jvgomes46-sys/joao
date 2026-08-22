@@ -1,0 +1,1 @@
+ALTER TABLE `config_standard_timelines` MODIFY COLUMN `tipo` enum('prazo_obra_por_porte','prazo_aprovacao_base','prazo_aprovacao_adicional','inicio_vendas_mes_padrao') NOT NULL;

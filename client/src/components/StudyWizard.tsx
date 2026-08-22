@@ -105,8 +105,9 @@ const WIZARD_DATA_DEFAULTS: WizardData = {
   areaSupressaoVegetalM2: "",
   arvoresIsoladasUn: "",
   participacaoEletrica: "concessionaria_cobre",
-  contingenciaPercentual: "5",
-  custoFinanceiroPercentual: "6",
+  // vazios = valor vigente da Configuração (hoje 5% e 6%)
+  contingenciaPercentual: "",
+  custoFinanceiroPercentual: "",
 
   modoPreco: "automatico",
   agioPercentual: "0",
@@ -120,7 +121,7 @@ const WIZARD_DATA_DEFAULTS: WizardData = {
   despesasAdministrativasPercentual: "4",
 
   duracaoAprovacoesMeses: "", // vazio = derivado da Configuração (base + adicionais por gatilho)
-  inicioVendasMes: "6",
+  inicioVendasMes: "", // vazio = padrão da Configuração
   curvaVendas: "curva_s",
   percentualEntrada: "20",
   numeroParcelas: "120",
@@ -213,7 +214,6 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
         return null;
       case "finance":
         if (!data.tmaAnual || Number(data.tmaAnual) <= 0) return "Preencha a Taxa Mínima de Atratividade (% a.a.)";
-        if (!data.inicioVendasMes || Number(data.inicioVendasMes) <= 0) return "Preencha o mês de início das vendas";
         return null;
       case "tax":
         if (!data.regimeTributario) return "Selecione o regime tributário";
@@ -326,7 +326,7 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
       await calculateFinanceEngineMutation.mutateAsync({
         projectId: project.id,
         duracaoAprovacoesMeses: data.duracaoAprovacoesMeses ? Number(data.duracaoAprovacoesMeses) : undefined,
-        inicioVendasMes: Number(data.inicioVendasMes),
+        inicioVendasMes: data.inicioVendasMes ? Number(data.inicioVendasMes) : undefined,
         precoBrutoPorLote: salesOutput.precoBrutoPorLote,
         prazoVendasMeses: salesOutput.prazoVendasMeses,
         curvaVendas: data.curvaVendas,
@@ -581,11 +581,11 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
               </div>
               <div>
                 <Label htmlFor="contingenciaPercentual">Contingência sobre a Obra (%)</Label>
-                <Input id="contingenciaPercentual" type="number" placeholder="5" value={data.contingenciaPercentual} onChange={(e) => updateData("contingenciaPercentual", e.target.value)} className="mt-2" />
+                <Input id="contingenciaPercentual" type="number" placeholder="Conforme Configuração" value={data.contingenciaPercentual} onChange={(e) => updateData("contingenciaPercentual", e.target.value)} className="mt-2" />
               </div>
               <div>
                 <Label htmlFor="custoFinanceiroPercentual">Custo Financeiro (% s/ infra)</Label>
-                <Input id="custoFinanceiroPercentual" type="number" placeholder="6" value={data.custoFinanceiroPercentual} onChange={(e) => updateData("custoFinanceiroPercentual", e.target.value)} className="mt-2" />
+                <Input id="custoFinanceiroPercentual" type="number" placeholder="Conforme Configuração" value={data.custoFinanceiroPercentual} onChange={(e) => updateData("custoFinanceiroPercentual", e.target.value)} className="mt-2" />
               </div>
             </div>
           </div>
@@ -691,8 +691,12 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
                 </p>
               </div>
               <div>
-                <Label htmlFor="inicioVendasMes">Início das Vendas (mês) *</Label>
-                <Input id="inicioVendasMes" type="number" placeholder="6" value={data.inicioVendasMes} onChange={(e) => updateData("inicioVendasMes", e.target.value)} className="mt-2" />
+                <Label htmlFor="inicioVendasMes">Início das Vendas (mês)</Label>
+                <Input id="inicioVendasMes" type="number" placeholder="Conforme Configuração" value={data.inicioVendasMes} onChange={(e) => updateData("inicioVendasMes", e.target.value)} className="mt-2" />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Em branco usa o padrão da Configuração. Vendas podem começar antes do fim das aprovações
+                  (pré-lançamento) — este campo não é amarrado ao prazo de aprovações.
+                </p>
               </div>
               <div>
                 <Label htmlFor="capexAprovacoesTotal">Custo de Aprovações (R$)</Label>

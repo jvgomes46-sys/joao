@@ -34,7 +34,6 @@ describe("FinanceEngineService — prazo de aprovações derivado da Configuraç
   });
 
   const financeBase = {
-    inicioVendasMes: 20,
     precoBrutoPorLote: 250_000,
     prazoVendasMeses: 30,
     curvaVendas: "curva_s" as const,
@@ -84,6 +83,20 @@ describe("FinanceEngineService — prazo de aprovações derivado da Configuraç
     const prazo = await prazoDoSnapshot();
     expect(prazo.prazoTotalMeses).toBe(15);
     expect(prazo.adicionaisAplicados.map((a) => a.gatilho)).toEqual(["condominio_fechado"]);
+  });
+
+  it("início das vendas vem da Configuração quando omitido, e NÃO é amarrado ao fim das aprovações", async () => {
+    await runCostEngine(projectId, userId, {
+      topografia: "plana", padraoPavimentacao: "asfalto", solucaoEsgoto: "ete_propria", solucaoAgua: "rede_publica",
+      tipologia: "loteamento_aberto", participacaoEletrica: "concessionaria_cobre",
+    });
+    await runFinanceEngine(projectId, userId, financeBase); // inicioVendasMes omitido
+
+    const snap = await getLatestConfigSnapshot(projectId, "finance_engine");
+    const d = snap!.snapshotData as { inicioVendasMesPadrao: number; prazoAprovacao: { prazoTotalMeses: number } };
+    expect(d.inicioVendasMesPadrao).toBe(6); // Planilha Mestre, Premissas!B73
+    // pré-lançamento: vendas começam ANTES do fim das aprovações (18 meses aqui)
+    expect(d.inicioVendasMesPadrao).toBeLessThan(d.prazoAprovacao.prazoTotalMeses);
   });
 
   it("prazo informado explicitamente tem precedência sobre o derivado", async () => {
