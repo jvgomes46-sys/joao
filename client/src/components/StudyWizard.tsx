@@ -22,6 +22,7 @@ interface WizardData {
   description: string;
   type: "loteamento" | "condominio" | "incorporacao" | "";
   location: string;
+  dataInicioPrevista: string;
 
   // GeoEngine
   areaBruta: string;
@@ -84,6 +85,7 @@ const WIZARD_DATA_DEFAULTS: WizardData = {
   description: "",
   type: "",
   location: "",
+  dataInicioPrevista: "",
 
   areaBruta: "",
   areaAPP: "",
@@ -266,6 +268,8 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
           description: data.description,
           type: data.type,
           location: data.location,
+          // input type="month" devolve "2026-01"; o backend espera ISO datetime
+          dataInicioPrevista: data.dataInicioPrevista ? new Date(`${data.dataInicioPrevista}-01T00:00:00.000Z`).toISOString() : undefined,
         });
         if (!created) throw new Error("Falha ao criar o projeto");
         createdProjectIdRef.current = created.id;
@@ -402,6 +406,20 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
               <Label htmlFor="location">Localização</Label>
               <Input id="location" placeholder="Ex: Formosa, GO" value={data.location} onChange={(e) => updateData("location", e.target.value)} className="mt-2" />
               <p className="text-xs text-muted-foreground mt-1">A UF (ex: ", GO") é usada para buscar custos unitários regionais quando disponíveis</p>
+            </div>
+            <div>
+              <Label htmlFor="dataInicioPrevista">Início Previsto</Label>
+              <Input
+                id="dataInicioPrevista"
+                type="month"
+                value={data.dataInicioPrevista}
+                onChange={(e) => updateData("dataInicioPrevista", e.target.value)}
+                className="mt-2"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Usado para alinhar este projeto aos demais na visão de Portfólio. Sem data, ele é tratado como
+                começando junto com os outros (cenário mais conservador de caixa).
+              </p>
             </div>
             <div>
               <Label htmlFor="description">Descrição</Label>

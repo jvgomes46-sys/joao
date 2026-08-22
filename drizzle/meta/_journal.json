@@ -106,6 +106,13 @@
       "when": 1787407021654,
       "tag": "0014_ancient_lucky_pierre",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "5",
+      "when": 1787413494129,
+      "tag": "0015_gray_guardian",
+      "breakpoints": true
     }
   ]
 }

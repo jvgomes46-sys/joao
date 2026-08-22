@@ -11,6 +11,7 @@ import Dashboard from "./pages/Dashboard";
 import Approvals from "./pages/Approvals";
 import Construction from "./pages/Construction";
 import AdminConfig from "./pages/AdminConfig";
+import Portfolio from "./pages/Portfolio";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -40,6 +41,11 @@ function Router() {
       <Route path="/admin/configuracao">
         <DashboardLayout>
           <AdminConfig />
+        </DashboardLayout>
+      </Route>
+      <Route path="/portfolio">
+        <DashboardLayout>
+          <Portfolio />
         </DashboardLayout>
       </Route>
       <Route path="/404" component={NotFound} />

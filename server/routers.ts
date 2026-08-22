@@ -43,6 +43,7 @@ import {
 import { STAGE_TEMPLATES } from "./engines/constructionEngine";
 import { CONFIG_TABLES, createConfigRow, deleteConfigRow, listConfigRows, updateConfigRow, type ConfigTableName } from "./services/adminConfigService";
 import { getLegalComplianceChecklist } from "./services/legalComplianceService";
+import { getPortfolioData } from "./services/portfolioService";
 import { TRPCError } from "@trpc/server";
 
 /** Garante que o projeto existe e pertence ao usuário antes de ler/gravar dados de um motor. */
@@ -93,6 +94,7 @@ export const appRouter = router({
           description: z.string().optional(),
           type: z.enum(["loteamento", "condominio", "incorporacao"]),
           location: z.string().optional(),
+          dataInicioPrevista: z.string().datetime().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -102,6 +104,7 @@ export const appRouter = router({
           description: input.description,
           type: input.type,
           location: input.location,
+          dataInicioPrevista: input.dataInicioPrevista ? new Date(input.dataInicioPrevista) : undefined,
           status: "rascunho",
         });
         return result;
@@ -726,6 +729,19 @@ export const appRouter = router({
           });
         }
       }),
+  }),
+
+  portfolio: router({
+    get: protectedProcedure.query(async ({ ctx }) => {
+      try {
+        return await getPortfolioData(ctx.user.id);
+      } catch (error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: error instanceof Error ? error.message : "Falha ao consolidar o portfólio",
+        });
+      }
+    }),
   }),
 
   adminConfig: router({

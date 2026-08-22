@@ -35,6 +35,10 @@ export const projects = mysqlTable("projects", {
   description: text("description"), // Descrição
   type: mysqlEnum("type", ["loteamento", "condominio", "incorporacao"]).notNull(), // Tipo de empreendimento
   location: varchar("location", { length: 255 }), // Localização
+  // Mês/ano previsto de início do projeto. Usado para alinhar os fluxos de
+  // caixa de vários projetos na visão de portfólio — sem isso, o "mês 1" de
+  // cada projeto seria tratado como o mesmo mês de calendário.
+  dataInicioPrevista: timestamp("dataInicioPrevista"),
   status: mysqlEnum("status", ["rascunho", "em_analise", "finalizado", "arquivado"]).default("rascunho").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

@@ -166,12 +166,12 @@ function custoObraNoMes(
 }
 
 /** NPV no formato Excel: primeiro fluxo descontado por (1+taxa)^1. */
-function npv(taxaMensal: number, fluxos: number[]): number {
+export function npv(taxaMensal: number, fluxos: number[]): number {
   return fluxos.reduce((acc, cf, i) => acc + cf / Math.pow(1 + taxaMensal, i + 1), 0);
 }
 
 /** IRR por bisseção sobre NPV(taxa) — robusto para o padrão de fluxo (custos primeiro, receita depois). */
-function irr(fluxos: number[]): number | null {
+export function irr(fluxos: number[]): number | null {
   let low = -0.99;
   let high = 10;
   const npvLow = npv(low, fluxos);
