@@ -114,17 +114,19 @@ const WIZARD_DATA_DEFAULTS: WizardData = {
   precoManualM2: "",
   modoAbsorcao: "automatico",
   absorcaoManualLotesMes: "",
-  comissaoPercentual: "6",
-  marketingPercentual: "3",
-  impostosPercentual: "6",
-  inadimplenciaPercentual: "5",
-  despesasAdministrativasPercentual: "4",
+  // vazias = valores vigentes da Configuração (Planilha Mestre: 6/3/6/5/4)
+  comissaoPercentual: "",
+  marketingPercentual: "",
+  impostosPercentual: "",
+  inadimplenciaPercentual: "",
+  despesasAdministrativasPercentual: "",
 
   duracaoAprovacoesMeses: "", // vazio = derivado da Configuração (base + adicionais por gatilho)
   inicioVendasMes: "", // vazio = padrão da Configuração
   curvaVendas: "curva_s",
-  percentualEntrada: "20",
-  numeroParcelas: "120",
+  // vazios = política vigente da Configuração (entrada 20%, 120 parcelas)
+  percentualEntrada: "",
+  numeroParcelas: "",
   tmaAnual: "14",
   reinvestirCaixaPositivo: false,
   custosIndexados: true,
@@ -314,11 +316,11 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
         precoManualM2: data.modoPreco === "manual" ? Number(data.precoManualM2) : undefined,
         modoAbsorcao: data.modoAbsorcao,
         absorcaoManualLotesMes: data.modoAbsorcao === "manual" ? Number(data.absorcaoManualLotesMes) : undefined,
-        comissaoPercentual: frac(data.comissaoPercentual) ?? 0,
-        marketingPercentual: frac(data.marketingPercentual) ?? 0,
-        impostosPercentual: frac(data.impostosPercentual) ?? 0,
-        inadimplenciaPercentual: frac(data.inadimplenciaPercentual) ?? 0,
-        despesasAdministrativasPercentual: frac(data.despesasAdministrativasPercentual) ?? 0,
+        comissaoPercentual: frac(data.comissaoPercentual),
+        marketingPercentual: frac(data.marketingPercentual),
+        impostosPercentual: frac(data.impostosPercentual),
+        inadimplenciaPercentual: frac(data.inadimplenciaPercentual),
+        despesasAdministrativasPercentual: frac(data.despesasAdministrativasPercentual),
       });
 
       // 4) FinanceEngine — fluxo de caixa de 120 meses, VPL/TIR/payback. Depende do GeoEngine + CostEngine;
@@ -331,8 +333,8 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
         prazoVendasMeses: salesOutput.prazoVendasMeses,
         curvaVendas: data.curvaVendas,
         percentualDeducoesVenda: salesOutput.percentualDeducoesVenda,
-        percentualEntrada: frac(data.percentualEntrada) ?? 0.2,
-        numeroParcelas: Number(data.numeroParcelas),
+        percentualEntrada: frac(data.percentualEntrada),
+        numeroParcelas: data.numeroParcelas ? Number(data.numeroParcelas) : undefined,
         tmaAnualFracao: frac(data.tmaAnual) ?? 0.14,
         reinvestirCaixaPositivo: data.reinvestirCaixaPositivo,
         custosIndexados: data.custosIndexados,
@@ -740,11 +742,11 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
               </div>
               <div>
                 <Label htmlFor="percentualEntrada">Entrada no Ato da Venda (%)</Label>
-                <Input id="percentualEntrada" type="number" placeholder="20" value={data.percentualEntrada} onChange={(e) => updateData("percentualEntrada", e.target.value)} className="mt-2" />
+                <Input id="percentualEntrada" type="number" placeholder="Conforme Configuração" value={data.percentualEntrada} onChange={(e) => updateData("percentualEntrada", e.target.value)} className="mt-2" />
               </div>
               <div>
                 <Label htmlFor="numeroParcelas">Número de Parcelas</Label>
-                <Input id="numeroParcelas" type="number" placeholder="120" value={data.numeroParcelas} onChange={(e) => updateData("numeroParcelas", e.target.value)} className="mt-2" />
+                <Input id="numeroParcelas" type="number" placeholder="Conforme Configuração" value={data.numeroParcelas} onChange={(e) => updateData("numeroParcelas", e.target.value)} className="mt-2" />
               </div>
             </div>
 

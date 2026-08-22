@@ -1,4 +1,4 @@
-import { createConfigSnapshot, getFinancialIndex, getInicioVendasMesPadrao, getPrazoAprovacao, getPrazoObraPorPorte } from "../config";
+import { createConfigSnapshot, getCostParameters, getFinancialIndex, getInicioVendasMesPadrao, getPrazoAprovacao, getPrazoObraPorPorte } from "../config";
 import { getCostEngineDataByProjectId, getGeoEngineDataByProjectId, getProjectById, upsertFinanceEngineData } from "../db";
 import { calcularFinanceEngine, CurvaObra, CurvaVendas, FinanceEngineInput, FinanceEngineOutput } from "../engines/financeEngine";
 
@@ -25,8 +25,9 @@ export interface FinanceEngineServiceInput {
 
   // Deduções e parcelamento
   percentualDeducoesVenda: number; // fração 0-1
-  percentualEntrada: number;
-  numeroParcelas: number;
+  // Política de parcelamento. Omitidos = valores vigentes da Configuração.
+  percentualEntrada?: number; // fração 0-1
+  numeroParcelas?: number;
 
   // Financeiro
   tmaAnualFracao: number;
@@ -76,6 +77,8 @@ export interface FinanceEngineBaseBuild {
   prazoAprovacao: { prazoBaseMeses: number; adicionaisAplicados: { gatilho: string; meses: number }[]; prazoTotalMeses: number };
   /** Mês padrão de início das vendas vindo da Configuração (antes de qualquer override). */
   inicioVendasMesPadrao: number;
+  /** Política de parcelamento vigente na Configuração (antes de qualquer override). */
+  parcelamentoPadrao: { entradaPercentual: number; numeroParcelas: number };
 }
 
 /**
@@ -148,6 +151,16 @@ export async function buildFinanceEngineInput(projectId: number, input: FinanceE
   const inicioVendasMesPadrao = await getInicioVendasMesPadrao();
   const inicioVendasMes = input.inicioVendasMes ?? inicioVendasMesPadrao;
 
+  // Parcelamento: omitido = política vigente da Configuração (entrada em
+  // percentual 0-100 lá, fração aqui).
+  const cfgParcelamento = await getCostParameters(["parcelamento_entrada_percentual", "parcelamento_numero_parcelas"], "Nacional");
+  const parcelamentoPadrao = {
+    entradaPercentual: cfgParcelamento["parcelamento_entrada_percentual"],
+    numeroParcelas: Math.round(cfgParcelamento["parcelamento_numero_parcelas"]),
+  };
+  const percentualEntrada = input.percentualEntrada ?? parcelamentoPadrao.entradaPercentual / 100;
+  const numeroParcelas = input.numeroParcelas ?? parcelamentoPadrao.numeroParcelas;
+
   const financeInput: FinanceEngineInput = {
     horizonteMeses: input.horizonteMeses,
     duracaoAprovacoesMeses,
@@ -158,8 +171,8 @@ export async function buildFinanceEngineInput(projectId: number, input: FinanceE
     prazoVendasMeses: input.prazoVendasMeses,
     curvaVendas: input.curvaVendas,
     percentualDeducoesVenda: input.percentualDeducoesVenda,
-    percentualEntrada: input.percentualEntrada,
-    numeroParcelas: input.numeroParcelas,
+    percentualEntrada,
+    numeroParcelas,
     tmaAnualFracao: input.tmaAnualFracao,
     reinvestirCaixaPositivo: input.reinvestirCaixaPositivo,
     custosIndexados: input.custosIndexados,
@@ -175,7 +188,7 @@ export async function buildFinanceEngineInput(projectId: number, input: FinanceE
     capexTotal,
   };
 
-  return { financeInput, bdiPercentualImplicito, indiceCustosAnualFracao, indiceRecebiveisAnualFracao, prazoAprovacao, inicioVendasMesPadrao };
+  return { financeInput, bdiPercentualImplicito, indiceCustosAnualFracao, indiceRecebiveisAnualFracao, prazoAprovacao, inicioVendasMesPadrao, parcelamentoPadrao };
 }
 
 /**
@@ -198,7 +211,7 @@ export async function runFinanceEngine(projectId: number, userId: number, input:
     throw new Error("Projeto não encontrado ou não pertence ao usuário");
   }
 
-  const { financeInput, bdiPercentualImplicito, indiceCustosAnualFracao, indiceRecebiveisAnualFracao, prazoAprovacao, inicioVendasMesPadrao } =
+  const { financeInput, bdiPercentualImplicito, indiceCustosAnualFracao, indiceRecebiveisAnualFracao, prazoAprovacao, inicioVendasMesPadrao, parcelamentoPadrao } =
     await buildFinanceEngineInput(projectId, input);
 
   const output = calcularFinanceEngine(financeInput);
@@ -228,6 +241,7 @@ export async function runFinanceEngine(projectId: number, userId: number, input:
       prazoAprovacao,
       duracaoObraMeses: financeInput.duracaoObraMeses,
       inicioVendasMesPadrao,
+      parcelamentoPadrao,
     },
     overrides: {
       capexAprovacoesTotal: input.capexAprovacoesTotal,

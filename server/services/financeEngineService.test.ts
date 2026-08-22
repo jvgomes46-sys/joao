@@ -99,6 +99,19 @@ describe("FinanceEngineService — prazo de aprovações derivado da Configuraç
     expect(d.inicioVendasMesPadrao).toBeLessThan(d.prazoAprovacao.prazoTotalMeses);
   });
 
+  it("parcelamento vem da Configuração quando omitido (entrada 20%, 120 parcelas)", async () => {
+    await runCostEngine(projectId, userId, {
+      topografia: "plana", padraoPavimentacao: "asfalto", solucaoEsgoto: "rede_publica", solucaoAgua: "rede_publica",
+      tipologia: "loteamento_aberto", participacaoEletrica: "concessionaria_cobre",
+    });
+    const { percentualEntrada: _e, numeroParcelas: _n, ...semParcelamento } = financeBase;
+    await runFinanceEngine(projectId, userId, semParcelamento);
+
+    const snap = await getLatestConfigSnapshot(projectId, "finance_engine");
+    const d = snap!.snapshotData as { parcelamentoPadrao: { entradaPercentual: number; numeroParcelas: number } };
+    expect(d.parcelamentoPadrao).toEqual({ entradaPercentual: 20, numeroParcelas: 120 });
+  });
+
   it("prazo informado explicitamente tem precedência sobre o derivado", async () => {
     await runCostEngine(projectId, userId, {
       topografia: "plana", padraoPavimentacao: "asfalto", solucaoEsgoto: "ete_propria", solucaoAgua: "rede_publica",

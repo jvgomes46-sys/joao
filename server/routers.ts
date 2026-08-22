@@ -309,11 +309,11 @@ export const appRouter = router({
           precoManualM2: z.number().positive().optional(),
           modoAbsorcao: z.enum(["automatico", "manual"]),
           absorcaoManualLotesMes: z.number().int().positive().optional(),
-          comissaoPercentual: z.number().min(0).max(1),
-          marketingPercentual: z.number().min(0).max(1),
-          impostosPercentual: z.number().min(0).max(1),
-          inadimplenciaPercentual: z.number().min(0).max(1),
-          despesasAdministrativasPercentual: z.number().min(0).max(1),
+          comissaoPercentual: z.number().min(0).max(1).optional(), // omitido = Configuração
+          marketingPercentual: z.number().min(0).max(1).optional(), // omitido = Configuração
+          impostosPercentual: z.number().min(0).max(1).optional(), // omitido = Configuração
+          inadimplenciaPercentual: z.number().min(0).max(1).optional(), // omitido = Configuração
+          despesasAdministrativasPercentual: z.number().min(0).max(1).optional(), // omitido = Configuração
           regiao: z.string().optional(),
         })
       )
@@ -365,8 +365,8 @@ export const appRouter = router({
           prazoVendasMeses: z.number().positive(),
           curvaVendas: z.enum(["constante", "rampa", "curva_s"]),
           percentualDeducoesVenda: z.number().min(0).max(1),
-          percentualEntrada: z.number().min(0).max(1),
-          numeroParcelas: z.number().int().positive(),
+          percentualEntrada: z.number().min(0).max(1).optional(), // omitido = Configuração
+          numeroParcelas: z.number().int().positive().optional(), // omitido = Configuração
           tmaAnualFracao: z.number().min(0).max(5),
           reinvestirCaixaPositivo: z.boolean().optional(),
           custosIndexados: z.boolean().optional(),
@@ -457,8 +457,8 @@ export const appRouter = router({
           prazoVendasMeses: z.number().positive(),
           curvaVendas: z.enum(["constante", "rampa", "curva_s"]),
           percentualDeducoesVenda: z.number().min(0).max(1),
-          percentualEntrada: z.number().min(0).max(1),
-          numeroParcelas: z.number().int().positive(),
+          percentualEntrada: z.number().min(0).max(1).optional(), // omitido = Configuração
+          numeroParcelas: z.number().int().positive().optional(), // omitido = Configuração
           tmaAnualFracao: z.number().min(0).max(5),
           reinvestirCaixaPositivo: z.boolean().optional(),
           custosIndexados: z.boolean().optional(),

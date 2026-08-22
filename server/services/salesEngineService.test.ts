@@ -104,3 +104,53 @@ describe("SalesEngineService — integração com GeoEngine e Módulo de Configu
     expect(output.absorcaoLotesMes).toBe(10);
   });
 });
+
+describe("SalesEngineService — deduções vêm da Configuração", () => {
+  let userId: number;
+  let projectId: number;
+
+  beforeAll(async () => {
+    const db = await getDb();
+    if (!db) throw new Error("DATABASE_URL não configurado — teste requer banco real");
+    await db.insert(users).values({ openId: "sales-ded-test-user", name: "Sales Ded" });
+    const [user] = await db.select().from(users).where(eq(users.openId, "sales-ded-test-user")).limit(1);
+    userId = user.id;
+    const project = await createProject({ userId, name: "Ded", type: "loteamento", location: "Sem Legislacao Teste Ded" });
+    projectId = project!.id;
+    await runGeoEngine(projectId, userId, { areaBruta: 100_000, modoLotes: "automatico", areaMediaLoteAlvo: 300 });
+  });
+
+  afterAll(async () => {
+    const db = await getDb();
+    if (!db) return;
+    for (const t of [geoEngineData, salesEngineData, configSnapshots]) await db.delete(t).where(eq(t.projectId, projectId));
+    await db.delete(projects).where(eq(projects.id, projectId));
+    await db.delete(users).where(eq(users.id, userId));
+  });
+
+  it("omitidas, usa 6/3/6/5/4 da Configuração — somando 24% do VGV", async () => {
+    const out = await runSalesEngine(projectId, userId, {
+      tipologia: "loteamento_aberto",
+      modoPreco: "automatico",
+      modoAbsorcao: "automatico",
+      // nenhuma dedução informada
+    });
+    expect(out.percentualDeducoesVenda).toBeCloseTo(0.24, 6); // Planilha Mestre, Premissas!B67
+
+    const snap = await getLatestConfigSnapshot(projectId, "sales_engine");
+    const d = (snap!.snapshotData as { deducoes: Record<string, number> }).deducoes;
+    expect(d.comissaoPercentual).toBeCloseTo(0.06, 6);
+    expect(d.despesasAdministrativasPercentual).toBeCloseTo(0.04, 6);
+  });
+
+  it("dedução informada tem precedência, as demais seguem a Configuração", async () => {
+    const out = await runSalesEngine(projectId, userId, {
+      tipologia: "loteamento_aberto",
+      modoPreco: "automatico",
+      modoAbsorcao: "automatico",
+      comissaoPercentual: 0.10, // só a comissão é premissa deste projeto
+    });
+    // 10 + 3 + 6 + 5 + 4 = 28%
+    expect(out.percentualDeducoesVenda).toBeCloseTo(0.28, 6);
+  });
+});

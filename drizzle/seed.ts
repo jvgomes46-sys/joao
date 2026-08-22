@@ -83,6 +83,22 @@ async function main() {
     },
   ]);
 
+  // --- Deduções sobre a venda e política de parcelamento ---
+  // Valores REAIS da Planilha Mestre (Premissas!B62-B66 = 6/3/6/5/4, somando
+  // 24% do VGV; B101 = entrada 20%; B102 = 120 parcelas). Guardados como
+  // percentual 0-100; os motores usam fração e a camada de serviço converte.
+  const FONTE_VENDA = "Planilha Mestre de Viabilidade — Premissas, seção de deduções sobre venda";
+  const FONTE_PARCELAMENTO = "Planilha Mestre de Viabilidade — Premissas, seção 9 (Parcelamento de vendas)";
+  await db.insert(configCostParameters).values([
+    { chave: "venda_comissao_percentual", valor: "6.0000", regiao: "Nacional", dataBase: now, fonte: `${FONTE_VENDA} — B62 (comissão de vendas)` },
+    { chave: "venda_marketing_percentual", valor: "3.0000", regiao: "Nacional", dataBase: now, fonte: `${FONTE_VENDA} — B63 (verba de marketing)` },
+    { chave: "venda_impostos_percentual", valor: "6.0000", regiao: "Nacional", dataBase: now, fonte: `${FONTE_VENDA} — B64 (impostos sobre venda)` },
+    { chave: "venda_inadimplencia_percentual", valor: "5.0000", regiao: "Nacional", dataBase: now, fonte: `${FONTE_VENDA} — B65 (inadimplência/distrato)` },
+    { chave: "venda_despesas_administrativas_percentual", valor: "4.0000", regiao: "Nacional", dataBase: now, fonte: `${FONTE_VENDA} — B66 (despesas administrativas)` },
+    { chave: "parcelamento_entrada_percentual", valor: "20.0000", regiao: "Nacional", dataBase: now, fonte: `${FONTE_PARCELAMENTO} — B101 (entrada no ato da venda)` },
+    { chave: "parcelamento_numero_parcelas", valor: "120.0000", regiao: "Nacional", dataBase: now, fonte: `${FONTE_PARCELAMENTO} — B102 (número de parcelas)` },
+  ]);
+
   // --- Módulo 2.5: índices de Aprovações e Projetos ---
   // Valores REAIS da Planilha Mestre de Viabilidade: índices R$/m² da aba
   // "Tabelas" seção M (linhas 94-102) e taxas fixas da aba "Aprovações"

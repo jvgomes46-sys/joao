@@ -1,4 +1,4 @@
-import { createConfigSnapshot, getTypologyMatrixEntry } from "../config";
+import { createConfigSnapshot, getCostParameters, getTypologyMatrixEntry } from "../config";
 import { getGeoEngineDataByProjectId, getProjectById, upsertSalesEngineData } from "../db";
 import { calcularSalesEngine, ModoAbsorcao, ModoPreco, SalesEngineOutput } from "../engines/salesEngine";
 import { ConfigTypologyMatrix } from "../../drizzle/schema";
@@ -13,11 +13,13 @@ export interface SalesEngineServiceInput {
   modoAbsorcao: ModoAbsorcao;
   absorcaoManualLotesMes?: number;
 
-  comissaoPercentual: number;
-  marketingPercentual: number;
-  impostosPercentual: number;
-  inadimplenciaPercentual: number;
-  despesasAdministrativasPercentual: number;
+  // Deduções sobre a venda (fração 0-1). Omitidas = valores vigentes da
+  // Configuração; informadas = premissa comercial deste projeto.
+  comissaoPercentual?: number;
+  marketingPercentual?: number;
+  impostosPercentual?: number;
+  inadimplenciaPercentual?: number;
+  despesasAdministrativasPercentual?: number;
 
   regiao?: string; // padrão: "Nacional" — deve casar com a região cadastrada na Matriz de Tipologia
 }
@@ -57,6 +59,27 @@ export async function runSalesEngine(projectId: number, userId: number, input: S
     typologyEntry = await getTypologyMatrixEntry(input.tipologia, regiao);
   }
 
+  // Deduções: omitidas = valores vigentes da Configuração. Guardados lá como
+  // percentual 0-100; os motores usam fração, então converte aqui.
+  const cfgVenda = await getCostParameters(
+    [
+      "venda_comissao_percentual",
+      "venda_marketing_percentual",
+      "venda_impostos_percentual",
+      "venda_inadimplencia_percentual",
+      "venda_despesas_administrativas_percentual",
+    ],
+    "Nacional"
+  );
+  const deducoes = {
+    comissaoPercentual: input.comissaoPercentual ?? cfgVenda["venda_comissao_percentual"] / 100,
+    marketingPercentual: input.marketingPercentual ?? cfgVenda["venda_marketing_percentual"] / 100,
+    impostosPercentual: input.impostosPercentual ?? cfgVenda["venda_impostos_percentual"] / 100,
+    inadimplenciaPercentual: input.inadimplenciaPercentual ?? cfgVenda["venda_inadimplencia_percentual"] / 100,
+    despesasAdministrativasPercentual:
+      input.despesasAdministrativasPercentual ?? cfgVenda["venda_despesas_administrativas_percentual"] / 100,
+  };
+
   const output = calcularSalesEngine({
     numeroLotes: geo.numeroLotes,
     areaMediaLote,
@@ -67,11 +90,7 @@ export async function runSalesEngine(projectId: number, userId: number, input: S
     modoAbsorcao: input.modoAbsorcao,
     velocidadeAbsorcaoPadrao: typologyEntry?.velocidadeAbsorcaoPadrao ? Number(typologyEntry.velocidadeAbsorcaoPadrao) : undefined,
     absorcaoManualLotesMes: input.absorcaoManualLotesMes,
-    comissaoPercentual: input.comissaoPercentual,
-    marketingPercentual: input.marketingPercentual,
-    impostosPercentual: input.impostosPercentual,
-    inadimplenciaPercentual: input.inadimplenciaPercentual,
-    despesasAdministrativasPercentual: input.despesasAdministrativasPercentual,
+    ...deducoes,
   });
 
   await upsertSalesEngineData(projectId, {
@@ -84,7 +103,7 @@ export async function runSalesEngine(projectId: number, userId: number, input: S
       modoPreco: input.modoPreco,
       modoAbsorcao: input.modoAbsorcao,
     },
-    inadimplencia: String(input.inadimplenciaPercentual * 100),
+    inadimplencia: String(deducoes.inadimplenciaPercentual * 100),
     custoVendas: String(output.deducoesTotalReais),
   });
 
@@ -96,6 +115,7 @@ export async function runSalesEngine(projectId: number, userId: number, input: S
       tipologia: input.tipologia,
       precoBaseM2Tipologia: typologyEntry ? Number(typologyEntry.precoBaseM2) : null,
       velocidadeAbsorcaoPadrao: typologyEntry?.velocidadeAbsorcaoPadrao ? Number(typologyEntry.velocidadeAbsorcaoPadrao) : null,
+      deducoes,
     },
     overrides: {
       modoPreco: input.modoPreco,
