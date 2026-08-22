@@ -163,6 +163,8 @@ export const appRouter = router({
           projectId: z.number(),
           areaBruta: z.number().positive(),
           areaAPP: z.number().min(0).optional(),
+          // Omitidos = seguem a legislação do município (ou o piso federal).
+          // Informados = premissa de projeto, podendo ser maior que o mínimo.
           percentualVerde: z.number().min(0).max(100).optional(),
           percentualInstitucional: z.number().min(0).max(100).optional(),
           percentualSistemaViario: z.number().min(0).max(100).optional(),

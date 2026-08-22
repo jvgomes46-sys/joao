@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { getDb } from "./db";
-import { configSnapshots } from "../drizzle/schema";
+import { configSnapshots, configLegislation } from "../drizzle/schema";
 import {
   createConfigSnapshot,
   extrairUfDaLocalizacao,
+  separarMunicipioUf,
   getAllCurrentUnitCosts,
   getCostParameter,
   getLatestConfigSnapshot,
@@ -110,5 +111,54 @@ describe("Módulo de Configuração", () => {
     expect(Number(outroItem!.valorUnitario)).toBeGreaterThan(0);
 
     await db!.delete(configUnitCosts).where(eq(configUnitCosts.regiao, "GO-TESTE-MERGE"));
+  });
+});
+
+describe("getLegislationForLocation — casamento do município a partir do texto livre", () => {
+  const MUNICIPIO = "Formosa Teste Config";
+
+  beforeAll(async () => {
+    const db = await getDb();
+    await db!.insert(configLegislation).values({
+      municipio: MUNICIPIO, uf: "GO",
+      percentualAreaVerdeMin: "20", percentualAreaInstitucionalMin: "8",
+      percentualSistemaViarioMin: "25", areaMinimaLote: "200", isFederalFallback: false,
+    });
+  });
+
+  afterAll(async () => {
+    const db = await getDb();
+    await db!.delete(configLegislation).where(eq(configLegislation.municipio, MUNICIPIO));
+  });
+
+  it("separa município e UF nos formatos aceitos pelo wizard", () => {
+    expect(separarMunicipioUf("Formosa, GO")).toEqual({ municipio: "Formosa", uf: "GO" });
+    expect(separarMunicipioUf("Formosa - GO")).toEqual({ municipio: "Formosa", uf: "GO" });
+    expect(separarMunicipioUf("Formosa/GO")).toEqual({ municipio: "Formosa", uf: "GO" });
+    expect(separarMunicipioUf("Formosa")).toEqual({ municipio: "Formosa", uf: null });
+  });
+
+  it("casa o município mesmo com a UF no texto (formato que o wizard sugere)", async () => {
+    const leg = await getLegislationForLocation(`${MUNICIPIO}, GO`);
+    expect(leg.usedFederalFallback).toBe(false);
+    expect(Number(leg.percentualAreaVerdeMin)).toBe(20);
+  });
+
+  it("casa ignorando caixa, acentos e espaços extras", async () => {
+    for (const variacao of [`  ${MUNICIPIO.toUpperCase()}  - GO`, `${MUNICIPIO}/go`, MUNICIPIO]) {
+      const leg = await getLegislationForLocation(variacao);
+      expect(leg.usedFederalFallback).toBe(false);
+    }
+  });
+
+  it("UF divergente não casa — cai no piso federal em vez de usar a lei de outro estado", async () => {
+    const leg = await getLegislationForLocation(`${MUNICIPIO}, SP`);
+    expect(leg.usedFederalFallback).toBe(true);
+  });
+
+  it("município não cadastrado cai no piso federal", async () => {
+    const leg = await getLegislationForLocation("Cidade Inexistente, MG");
+    expect(leg.usedFederalFallback).toBe(true);
+    expect(Number(leg.percentualAreaVerdeMin)).toBe(15);
   });
 });

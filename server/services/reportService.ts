@@ -307,6 +307,32 @@ export async function generateTechnicalReportPdf(projectId: number, userId: numb
     drawKeyValueRow(doc, "Eficiência Urbanística", `${Number(geo.eficienciaUrbanistica ?? 0).toFixed(1)}%`);
     drawKeyValueRow(doc, "Número de Lotes", number0(geo.numeroLotes ?? 0));
     drawKeyValueRow(doc, "Densidade", `${Number(geo.densidade ?? 0).toFixed(1)} hab/ha`);
+
+    const idx = geo.indicesUrbanisticos as {
+      percentualVerde?: number; percentualInstitucional?: number; percentualSistemaViario?: number;
+      pisosAplicados?: { verdeMin: number; institucionalMin: number; sistemaViarioMin: number };
+      origemPercentuais?: { fonte: string; municipio: string; verde: string; institucional: string; sistemaViario: string };
+    } | null;
+    if (idx?.pisosAplicados && idx.origemPercentuais) {
+      const o = idx.origemPercentuais;
+      const fonteLabel =
+        o.fonte === "legislacao_municipal" ? `legislação de ${o.municipio}` : "piso federal (Lei 6.766/79) — município não cadastrado";
+      doc.moveDown(0.3);
+      doc.fontSize(10).font("Helvetica-Bold").text("Percentuais urbanísticos — origem e mínimos aplicados:");
+      doc.font("Helvetica");
+      drawKeyValueRow(doc, "Fonte dos mínimos legais", fonteLabel);
+      drawTable(
+        doc,
+        ["Percentual", "Adotado", "Mínimo legal", "Origem"],
+        [
+          ["Área Verde", `${(idx.percentualVerde ?? 0).toFixed(2)}%`, `${idx.pisosAplicados.verdeMin}%`, o.verde === "legislacao" ? "legislação" : "premissa do projeto"],
+          ["Área Institucional", `${(idx.percentualInstitucional ?? 0).toFixed(2)}%`, `${idx.pisosAplicados.institucionalMin}%`, o.institucional === "legislacao" ? "legislação" : "premissa do projeto"],
+          ["Sistema Viário", `${(idx.percentualSistemaViario ?? 0).toFixed(2)}%`, `${idx.pisosAplicados.sistemaViarioMin}%`, o.sistemaViario === "legislacao" ? "legislação" : "premissa do projeto"],
+        ],
+        [140, 90, 100, 150],
+        { align: ["left", "right", "right", "left"] }
+      );
+    }
   }
 
   // --- Conformidade Legal (Lei 6.766/79) ---

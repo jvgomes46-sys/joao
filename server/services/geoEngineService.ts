@@ -24,10 +24,31 @@ export async function runGeoEngine(
 
   const legislation = await getLegislationForLocation(project.location ?? "");
 
+  // Pisos legais: legislação do município cadastrado; se o município não
+  // estiver cadastrado, cai no piso federal da Lei 6.766/79 (com aviso).
+  const pisoVerde = input.pisoPercentualVerdeMin ?? Number(legislation.percentualAreaVerdeMin ?? 15);
+  const pisoInstitucional = input.pisoPercentualInstitucionalMin ?? Number(legislation.percentualAreaInstitucionalMin ?? 5);
+  const pisoSistemaViario = input.pisoPercentualSistemaViarioMin ?? Number(legislation.percentualSistemaViarioMin ?? 20);
+
+  // Percentuais de PROJETO: se não forem informados, o estudo é desenhado no
+  // piso legal do local — não num 15/5/20 chumbado. Informar um valor
+  // continua valendo (um empreendimento pode querer mais área verde que o
+  // mínimo, por exemplo); se o valor informado ficar ABAIXO do piso, o
+  // próprio motor emite o alerta de não conformidade.
+  const percentuaisSeguemLegislacao = {
+    verde: input.percentualVerde === undefined,
+    institucional: input.percentualInstitucional === undefined,
+    sistemaViario: input.percentualSistemaViario === undefined,
+  };
+
   const inputComPisos: GeoEngineInput = {
     ...input,
-    pisoPercentualVerdeMin: input.pisoPercentualVerdeMin ?? Number(legislation.percentualAreaVerdeMin ?? 15),
-    pisoPercentualInstitucionalMin: input.pisoPercentualInstitucionalMin ?? Number(legislation.percentualAreaInstitucionalMin ?? 5),
+    percentualVerde: input.percentualVerde ?? pisoVerde,
+    percentualInstitucional: input.percentualInstitucional ?? pisoInstitucional,
+    percentualSistemaViario: input.percentualSistemaViario ?? pisoSistemaViario,
+    pisoPercentualVerdeMin: pisoVerde,
+    pisoPercentualInstitucionalMin: pisoInstitucional,
+    pisoPercentualSistemaViarioMin: pisoSistemaViario,
     pisoAreaMinimaLote: input.pisoAreaMinimaLote ?? Number(legislation.areaMinimaLote ?? 125),
   };
 
@@ -57,6 +78,14 @@ export async function runGeoEngine(
       dispensaRedeColetora: output.dispensaRedeColetora,
       conformidadeLei6766: output.conformidadeLei6766,
       alertasConformidade: output.alertasConformidade,
+      pisosAplicados: output.pisosAplicados,
+      origemPercentuais: {
+        fonte: legislation.usedFederalFallback ? "piso_federal" : "legislacao_municipal",
+        municipio: legislation.municipio,
+        verde: percentuaisSeguemLegislacao.verde ? "legislacao" : "manual",
+        institucional: percentuaisSeguemLegislacao.institucional ? "legislacao" : "manual",
+        sistemaViario: percentuaisSeguemLegislacao.sistemaViario ? "legislacao" : "manual",
+      },
     },
     checklistGRAProhab: output.checklistGRAPROHAB,
   });
@@ -69,6 +98,8 @@ export async function runGeoEngine(
       municipio: legislation.municipio,
       percentualAreaVerdeMin: Number(legislation.percentualAreaVerdeMin ?? 15),
       percentualAreaInstitucionalMin: Number(legislation.percentualAreaInstitucionalMin ?? 5),
+      percentualSistemaViarioMin: pisoSistemaViario,
+      percentuaisSeguemLegislacao,
       areaMinimaLote: Number(legislation.areaMinimaLote ?? 125),
       frenteMinimaLote: Number(legislation.frenteMinimaLote ?? 5),
     },

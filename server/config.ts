@@ -25,18 +25,54 @@ import { getDb, parseJsonColumn } from "./db";
 // A. Legislação municipal/regional, com fallback explícito para o piso federal
 // ---------------------------------------------------------------------------
 
-export async function getLegislationForLocation(municipio: string, uf?: string) {
+/**
+ * Normaliza nome de município para comparação: sem acentos, sem caixa, sem
+ * espaços duplicados. "Formosa" e "FORMOSA " casam; "São Paulo" e "Sao Paulo"
+ * também.
+ */
+function normalizarMunicipio(nome: string): string {
+  return nome
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+/**
+ * Separa "Formosa, GO" / "Formosa - GO" / "Formosa/GO" em município + UF.
+ * O campo `location` do projeto é texto livre, e o próprio wizard sugere o
+ * formato com UF — comparar essa string crua contra o nome do município
+ * cadastrado nunca casaria.
+ */
+export function separarMunicipioUf(location: string): { municipio: string; uf: string | null } {
+  const uf = extrairUfDaLocalizacao(location);
+  if (!uf) return { municipio: location.trim(), uf: null };
+  // remove o sufixo de UF e o separador que vier antes dele
+  const municipio = location.replace(/[\s,\/\-]+[A-Za-z]{2}\s*$/, "").trim();
+  return { municipio: municipio || location.trim(), uf };
+}
+
+export async function getLegislationForLocation(location: string, ufExplicita?: string) {
   const db = await getDb();
   if (!db) throw new Error("[Config] Banco de dados não disponível — não é possível ler legislação");
 
-  const rows = await db
-    .select()
-    .from(configLegislation)
-    .where(eq(configLegislation.municipio, municipio))
-    .limit(1);
+  const { municipio, uf } = separarMunicipioUf(location);
+  const ufAlvo = ufExplicita ?? uf;
+  const alvo = normalizarMunicipio(municipio);
 
-  if (rows.length > 0) {
-    return { ...rows[0], regrasArborizacao: parseJsonColumn(rows[0].regrasArborizacao), usedFederalFallback: false };
+  // A tabela de legislação tem uma linha por município cadastrado (dezenas,
+  // não milhares), então normalizar em JS é mais confiável do que depender
+  // do collation do banco para acentos/caixa.
+  const candidatos = await db.select().from(configLegislation).where(eq(configLegislation.isFederalFallback, false));
+
+  const match =
+    candidatos.find((r) => normalizarMunicipio(r.municipio) === alvo && (!ufAlvo || !r.uf || r.uf.toUpperCase() === ufAlvo)) ??
+    // sem UF no texto do projeto: aceita o município pelo nome, se único
+    (ufAlvo ? undefined : candidatos.find((r) => normalizarMunicipio(r.municipio) === alvo));
+
+  if (match) {
+    return { ...match, regrasArborizacao: parseJsonColumn(match.regrasArborizacao), usedFederalFallback: false };
   }
 
   const fallbackRows = await db

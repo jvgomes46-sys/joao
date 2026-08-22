@@ -87,9 +87,10 @@ const WIZARD_DATA_DEFAULTS: WizardData = {
 
   areaBruta: "",
   areaAPP: "",
-  percentualVerde: "15",
-  percentualInstitucional: "5",
-  percentualSistemaViario: "20",
+  // vazios = seguem a legislação do município (ou o piso federal, com aviso)
+  percentualVerde: "",
+  percentualInstitucional: "",
+  percentualSistemaViario: "",
   modoLotes: "automatico",
   areaMediaLoteAlvo: "",
   numeroLotesManual: "",
@@ -422,15 +423,23 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
               </div>
               <div>
                 <Label htmlFor="percentualVerde">Área Verde (%)</Label>
-                <Input id="percentualVerde" type="number" placeholder="15" value={data.percentualVerde} onChange={(e) => updateData("percentualVerde", e.target.value)} className="mt-2" />
+                <Input id="percentualVerde" type="number" placeholder="Conforme legislação" value={data.percentualVerde} onChange={(e) => updateData("percentualVerde", e.target.value)} className="mt-2" />
               </div>
               <div>
                 <Label htmlFor="percentualInstitucional">Área Institucional (%)</Label>
-                <Input id="percentualInstitucional" type="number" placeholder="5" value={data.percentualInstitucional} onChange={(e) => updateData("percentualInstitucional", e.target.value)} className="mt-2" />
+                <Input id="percentualInstitucional" type="number" placeholder="Conforme legislação" value={data.percentualInstitucional} onChange={(e) => updateData("percentualInstitucional", e.target.value)} className="mt-2" />
               </div>
               <div>
                 <Label htmlFor="percentualSistemaViario">Sistema Viário (%)</Label>
-                <Input id="percentualSistemaViario" type="number" placeholder="20" value={data.percentualSistemaViario} onChange={(e) => updateData("percentualSistemaViario", e.target.value)} className="mt-2" />
+                <Input id="percentualSistemaViario" type="number" placeholder="Conforme legislação" value={data.percentualSistemaViario} onChange={(e) => updateData("percentualSistemaViario", e.target.value)} className="mt-2" />
+              </div>
+              <div className="md:col-span-2">
+                <p className="text-xs text-muted-foreground">
+                  Deixe os percentuais em branco para seguir a legislação do município informado em Localização
+                  (ou o piso federal da Lei 6.766/79, com aviso, se o município não estiver cadastrado na
+                  Configuração). Preencha para adotar uma premissa própria do projeto — um valor acima do mínimo
+                  é permitido; abaixo do mínimo o sistema calcula, mas emite alerta de não conformidade.
+                </p>
               </div>
             </div>
 

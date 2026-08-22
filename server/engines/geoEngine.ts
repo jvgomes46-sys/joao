@@ -40,6 +40,7 @@ export interface GeoEngineInput {
   // municipal ou piso federal Lei 6.766/79 — nunca hardcoded no motor)
   pisoPercentualVerdeMin?: number; // padrão: 15
   pisoPercentualInstitucionalMin?: number; // padrão: 5
+  pisoPercentualSistemaViarioMin?: number; // padrão: 20
   pisoAreaMinimaLote?: number; // padrão: 125 m²
 }
 
@@ -58,6 +59,8 @@ export interface GeoEngineOutput {
   percentualVerde: number;
   percentualInstitucional: number;
   percentualSistemaViario: number;
+  /** Pisos legais efetivamente aplicados (município cadastrado, piso federal ou override). */
+  pisosAplicados: { verdeMin: number; institucionalMin: number; sistemaViarioMin: number };
   percentualCalcadas: number;
 
   // Coeficientes
@@ -108,6 +111,7 @@ export function calcularGeoEngine(input: GeoEngineInput): GeoEngineOutput {
     taxaOcupacao = 60,
     pisoPercentualVerdeMin = 15,
     pisoPercentualInstitucionalMin = 5,
+    pisoPercentualSistemaViarioMin = 20,
   } = input;
 
   if (areaAPP > areaBruta) {
@@ -186,9 +190,9 @@ export function calcularGeoEngine(input: GeoEngineInput): GeoEngineOutput {
     conformidadeLei6766 = false;
   }
 
-  if (percentualSistemaViarioFinal < 20) {
+  if (percentualSistemaViarioFinal < pisoPercentualSistemaViarioMin) {
     alertasConformidade.push(
-      `Sistema viário insuficiente: ${percentualSistemaViarioFinal.toFixed(2)}% (recomendado mínimo 20%)`
+      `Sistema viário insuficiente: ${percentualSistemaViarioFinal.toFixed(2)}% (mínimo ${pisoPercentualSistemaViarioMin}%)`
     );
   }
 
@@ -200,6 +204,9 @@ export function calcularGeoEngine(input: GeoEngineInput): GeoEngineOutput {
 
   // Checklist GRAPROHAB
   const checklistGRAPROHAB = gerarChecklistGRAPROHAB(input, {
+    pisoPercentualVerdeMin,
+    pisoPercentualInstitucionalMin,
+    pisoPercentualSistemaViarioMin,
     areaParcelavel,
     areaVerde,
     areaInstitucional,
@@ -224,6 +231,11 @@ export function calcularGeoEngine(input: GeoEngineInput): GeoEngineOutput {
     percentualInstitucional: percentualInstitucionalFinal,
     percentualSistemaViario: percentualSistemaViarioFinal,
     percentualCalcadas: percentualCalcadasFinal,
+    pisosAplicados: {
+      verdeMin: pisoPercentualVerdeMin,
+      institucionalMin: pisoPercentualInstitucionalMin,
+      sistemaViarioMin: pisoPercentualSistemaViarioMin,
+    },
     coeficienteAproveitamento,
     taxaOcupacao,
     potencialConstrutivo,
@@ -245,6 +257,9 @@ export function calcularGeoEngine(input: GeoEngineInput): GeoEngineOutput {
 function gerarChecklistGRAPROHAB(
   input: GeoEngineInput,
   calculados: {
+    pisoPercentualVerdeMin: number;
+    pisoPercentualInstitucionalMin: number;
+    pisoPercentualSistemaViarioMin: number;
     areaParcelavel: number;
     areaVerde: number;
     areaInstitucional: number;
@@ -260,24 +275,24 @@ function gerarChecklistGRAPROHAB(
   items.push({
     id: "graprohab_001",
     categoria: "Áreas Públicas",
-    criterio: "Área verde mínima de 15%",
-    conforme: calculados.percentualVerdeFinal >= 15,
+    criterio: `Área verde mínima de ${calculados.pisoPercentualVerdeMin}%`,
+    conforme: calculados.percentualVerdeFinal >= calculados.pisoPercentualVerdeMin,
     observacao: `Atual: ${calculados.percentualVerdeFinal.toFixed(2)}%`,
   });
 
   items.push({
     id: "graprohab_002",
     categoria: "Áreas Públicas",
-    criterio: "Área institucional mínima de 5%",
-    conforme: calculados.percentualInstitucionalFinal >= 5,
+    criterio: `Área institucional mínima de ${calculados.pisoPercentualInstitucionalMin}%`,
+    conforme: calculados.percentualInstitucionalFinal >= calculados.pisoPercentualInstitucionalMin,
     observacao: `Atual: ${calculados.percentualInstitucionalFinal.toFixed(2)}%`,
   });
 
   items.push({
     id: "graprohab_003",
     categoria: "Áreas Públicas",
-    criterio: "Sistema viário adequado (mínimo 20%)",
-    conforme: calculados.sistemaViario / calculados.areaParcelavel >= 0.2,
+    criterio: `Sistema viário adequado (mínimo ${calculados.pisoPercentualSistemaViarioMin}%)`,
+    conforme: (calculados.sistemaViario / calculados.areaParcelavel) * 100 >= calculados.pisoPercentualSistemaViarioMin,
     observacao: `Atual: ${((calculados.sistemaViario / calculados.areaParcelavel) * 100).toFixed(2)}%`,
   });
 
