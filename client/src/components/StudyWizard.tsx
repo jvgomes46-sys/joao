@@ -181,6 +181,9 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
   // um input), o projeto já foi criado — reaproveita o mesmo id ao tentar de
   // novo, em vez de criar um segundo projeto órfão a cada retry.
   const createdProjectIdRef = useRef<number | null>(null);
+  // Uma vez que o usuário escolhe "Murado?" manualmente, trocar a tipologia
+  // não deve mais sobrescrever essa escolha — só sugere o padrão até então.
+  const muradoTocadoManualmenteRef = useRef(false);
 
   const createProjectMutation = trpc.projects.create.useMutation();
   const calculateGeoEngineMutation = trpc.geoEngine.calculate.useMutation();
@@ -514,9 +517,11 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
                   onValueChange={(value) => {
                     const tipologia = value as WizardData["tipologia"];
                     updateData("tipologia", tipologia);
-                    // padrão sugerido ao trocar de tipologia — usuário ainda pode
-                    // sobrescrever no campo "Murado?" logo abaixo
-                    updateData("murado", tipologia === "condominio_fechado");
+                    // padrão sugerido ao trocar de tipologia — só se aplica
+                    // enquanto o usuário não tiver escolhido "Murado?" manualmente
+                    if (!muradoTocadoManualmenteRef.current) {
+                      updateData("murado", tipologia === "condominio_fechado");
+                    }
                   }}
                 >
                   <SelectTrigger id="tipologia" className="mt-2">
@@ -573,7 +578,13 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
             <div className="pt-2 border-t border-border/40 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="murado">Murado? *</Label>
-                <Select value={data.murado ? "sim" : "nao"} onValueChange={(value) => updateData("murado", value === "sim")}>
+                <Select
+                  value={data.murado ? "sim" : "nao"}
+                  onValueChange={(value) => {
+                    muradoTocadoManualmenteRef.current = true;
+                    updateData("murado", value === "sim");
+                  }}
+                >
                   <SelectTrigger id="murado" className="mt-2">
                     <SelectValue />
                   </SelectTrigger>
