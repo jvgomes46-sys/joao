@@ -203,12 +203,13 @@ async function main() {
 
   // --- B. Custos Unitários (base SINAPI) — CostEngine (seção 2.4) ---
   // Valores marcados "SINAPI [código] — Residencial Mirante" vêm do
-  // orçamento real de implantação (Formosa/GO, base SINAPI GO, sem BDI —
-  // BDI é aplicado separadamente via config_cost_parameters). Valores sem
-  // essa fonte continuam TODO(confirmar) — o orçamento real não cobre
-  // todo item do CostEngine (ex.: poço, reservatório, fossa, ETE — o
-  // projeto de referência usa rede pública/concessionária, não solução
-  // autônoma).
+  // orçamento real de implantação de um condomínio fechado (PM, Formosa/GO,
+  // base SINAPI GO, sem BDI — BDI é aplicado separadamente via
+  // config_cost_parameters). Valores marcados "MV (loteamento)" vêm do
+  // orçamento real de implantação de um loteamento aberto na mesma região,
+  // que cobre itens que o condomínio fechado não tinha (poço com bombas e
+  // reservatório, obra de conexão externa de energia). Valores sem
+  // nenhuma dessas fontes continuam TODO(confirmar).
   const regiao = "Nacional";
   const unitCostRows: (typeof configUnitCosts.$inferInsert)[] = [
     // Terraplenagem
@@ -231,9 +232,9 @@ async function main() {
     // Água
     { grupo: "agua", itemCodigo: "rede_distribuicao_agua", itemDescricao: "Rede de distribuição de água", unidade: "m", valorUnitario: "52.16", regiao, dataBase: now, fonte: "SINAPI 89451 — Residencial Mirante: tubo PVC soldável DN 75mm" },
     { grupo: "agua", itemCodigo: "ligacao_domiciliar_agua", itemDescricao: "Ligação domiciliar de água", unidade: "un", valorUnitario: "650.00", regiao, dataBase: now, fonte: "TODO(confirmar) — não detalhado por lote no orçamento de referência" },
-    { grupo: "agua", itemCodigo: "poco_tubular", itemDescricao: "Poço tubular profundo", unidade: "vb", valorUnitario: "45000.00", regiao, dataBase: now, fonte: "TODO(confirmar) — projeto de referência usa rede pública, não poço" },
+    { grupo: "agua", itemCodigo: "poco_tubular", itemDescricao: "Poço tubular profundo", unidade: "vb", valorUnitario: "351799.46", regiao, dataBase: now, fonte: "Cotação — MV (loteamento), Formosa/GO: execução de poço tubular profundo, com bombas e reservatório (item único)" },
     { grupo: "agua", itemCodigo: "reservatorio", itemDescricao: "Reservatório", unidade: "m3", valorUnitario: "2200.00", regiao, dataBase: now, fonte: "TODO(confirmar) — não presente no orçamento de referência" },
-    { grupo: "agua", itemCodigo: "casa_de_bombas", itemDescricao: "Casa de bombas", unidade: "un", valorUnitario: "18000.00", regiao, dataBase: now, fonte: "TODO(confirmar) — não presente no orçamento de referência" },
+    { grupo: "agua", itemCodigo: "casa_de_bombas", itemDescricao: "Casa de bombas", unidade: "un", valorUnitario: "0.00", regiao, dataBase: now, fonte: "Incluído no item poço_tubular — MV (loteamento) cobra poço + bombas + reservatório como item único, para não contar o custo em dobro" },
     { grupo: "agua", itemCodigo: "interligacao_rede_agua", itemDescricao: "Interligação à rede pública de água", unidade: "vb", valorUnitario: "24876.36", regiao, dataBase: now, fonte: "SINAPI cotação — Residencial Mirante: válvula redutora de pressão + caixa em alvenaria" },
     // Esgoto — projeto de referência trata como verba única (R$1.057.658,00
     // por cotação, sem detalhamento por rede/PV/ligação); mantidos os
@@ -251,7 +252,7 @@ async function main() {
     { grupo: "energia", itemCodigo: "transformadores", itemDescricao: "Transformadores", unidade: "un", valorUnitario: "15570.55", regiao, dataBase: now, fonte: "SINAPI 102104+102109 — Residencial Mirante: transformador 75kVA (15503,19) + suporte em poste (67,36)" },
     { grupo: "energia", itemCodigo: "iluminacao_publica", itemDescricao: "Iluminação pública", unidade: "un", valorUnitario: "1600.00", regiao, dataBase: now, fonte: "TODO(confirmar) — não detalhado separadamente no orçamento de referência" },
     { grupo: "energia", itemCodigo: "entrada_por_lote", itemDescricao: "Entrada de energia por lote", unidade: "un", valorUnitario: "480.00", regiao, dataBase: now, fonte: "TODO(confirmar) — não detalhado por lote no orçamento de referência" },
-    { grupo: "energia", itemCodigo: "obra_conexao_externa_energia", itemDescricao: "Obra de conexão externa à rede", unidade: "vb", valorUnitario: "120000.00", regiao, dataBase: now, fonte: "TODO(confirmar) — não presente no orçamento de referência" },
+    { grupo: "energia", itemCodigo: "obra_conexao_externa_energia", itemDescricao: "Obra de conexão externa à rede", unidade: "vb", valorUnitario: "479748.75", regiao, dataBase: now, fonte: "Cotação — MV (loteamento), Formosa/GO: execução de obra de extensão da rede de conexão conforme exigência ENEL" },
     // Obras Civis — Condomínio Fechado
     { grupo: "obras_civis_condominio", itemCodigo: "muro_condominio", itemDescricao: "Muro de fechamento", unidade: "m", valorUnitario: "626.10", regiao, dataBase: now, fonte: "Cotação — Residencial Mirante: muro em bloco cerâmico rebocado e pintado" },
     { grupo: "obras_civis_condominio", itemCodigo: "portaria", itemDescricao: "Portaria", unidade: "un", valorUnitario: "788897.26", regiao, dataBase: now, fonte: "Cotação — Residencial Mirante: guarita/administração do condomínio, 451m² × R$1749,26/m²" },
