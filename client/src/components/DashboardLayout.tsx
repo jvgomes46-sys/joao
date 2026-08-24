@@ -25,7 +25,12 @@ import { Layers, LayoutDashboard, LogOut, PanelLeft, Settings, Users } from "luc
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
+import { SimpleLoginForm } from "./SimpleLoginForm";
 import { Button } from "./ui/button";
+
+// Só existe quando o app está configurado com um provedor OAuth de verdade —
+// em produção sem OAuth, o login é feito pelo formulário simples abaixo.
+const OAUTH_CONFIGURED = Boolean(import.meta.env.VITE_OAUTH_PORTAL_URL);
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Meus Empreendimentos", path: "/projetos" },
@@ -46,7 +51,7 @@ export default function DashboardLayout({
     const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
     return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
   });
-  const { loading, user } = useAuth();
+  const { loading, user, refresh } = useAuth();
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
@@ -62,19 +67,23 @@ export default function DashboardLayout({
         <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
           <div className="flex flex-col items-center gap-6">
             <h1 className="text-2xl font-semibold tracking-tight text-center">
-              Sign in to continue
+              EVTE PRO
             </h1>
             <p className="text-sm text-muted-foreground text-center max-w-sm">
-              Access to this dashboard requires authentication. Continue to launch the login flow.
+              Entre para acessar seus estudos de viabilidade.
             </p>
           </div>
-          <Button
-            onClick={() => startLogin()}
-            size="lg"
-            className="w-full shadow-lg hover:shadow-xl transition-all"
-          >
-            Sign in
-          </Button>
+          <SimpleLoginForm onSuccess={() => refresh()} />
+          {OAUTH_CONFIGURED ? (
+            <Button
+              onClick={() => startLogin()}
+              variant="outline"
+              size="lg"
+              className="w-full"
+            >
+              Entrar com login corporativo
+            </Button>
+          ) : null}
         </div>
       </div>
     );

@@ -1,5 +1,4 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import { startLogin } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -47,7 +46,7 @@ export default function Home() {
             <Building2 className="w-8 h-8 text-primary" />
             <h1 className="text-2xl font-bold">EVTE PRO</h1>
           </div>
-          <Button onClick={() => startLogin()} size="sm">
+          <Button onClick={() => navigate("/projetos")} size="sm">
             Entrar
           </Button>
         </div>
@@ -72,7 +71,7 @@ export default function Home() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-            <Button size="lg" onClick={() => startLogin()} className="gap-2">
+            <Button size="lg" onClick={() => navigate("/projetos")} className="gap-2">
               Começar Agora
               <ArrowRight className="w-4 h-4" />
             </Button>
@@ -174,7 +173,7 @@ export default function Home() {
               Crie seu primeiro estudo de viabilidade agora e descubra o potencial
               dos seus empreendimentos imobiliários.
             </p>
-            <Button size="lg" onClick={() => startLogin()} className="gap-2">
+            <Button size="lg" onClick={() => navigate("/projetos")} className="gap-2">
               Acessar Plataforma
               <ArrowRight className="w-4 h-4" />
             </Button>
