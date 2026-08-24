@@ -191,10 +191,13 @@ export async function runCostEngine(
       solucaoAgua: costInput.solucaoAgua,
       solucaoEsgoto: costInput.solucaoEsgoto,
       necessitaElevatoria: costInput.necessitaElevatoria ?? false,
+      responsavelFossa: costInput.responsavelFossa ?? "incorporadora",
       participacaoEletrica: costInput.participacaoEletrica,
       areaSupressaoVegetalM2: costInput.areaSupressaoVegetalM2 ?? 0,
       arvoresIsoladasUn: costInput.arvoresIsoladasUn ?? 0,
       isChacara: costInput.isChacara ?? false,
+      murado: costInput.murado ?? costInput.tipologia === "condominio_fechado",
+      tipoMuro: costInput.tipoMuro ?? "tijolo",
     },
   });
 

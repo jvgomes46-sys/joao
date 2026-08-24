@@ -40,11 +40,14 @@ interface WizardData {
   padraoPavimentacao: "asfalto" | "paver";
   solucaoEsgoto: "fossa" | "rede_publica" | "ete_propria";
   necessitaElevatoria: boolean;
+  responsavelFossa: "incorporadora" | "proprietario_lote";
   solucaoAgua: "poco" | "rede_publica";
   isChacara: boolean;
   areaSupressaoVegetalM2: string;
   arvoresIsoladasUn: string;
   participacaoEletrica: "cliente_paga" | "concessionaria_cobre";
+  murado: boolean;
+  tipoMuro: "tijolo" | "cerca_metalica";
   contingenciaPercentual: string;
   custoFinanceiroPercentual: string;
 
@@ -102,11 +105,16 @@ const WIZARD_DATA_DEFAULTS: WizardData = {
   padraoPavimentacao: "asfalto",
   solucaoEsgoto: "rede_publica",
   necessitaElevatoria: false,
+  responsavelFossa: "incorporadora",
   solucaoAgua: "rede_publica",
   isChacara: false,
   areaSupressaoVegetalM2: "",
   arvoresIsoladasUn: "",
   participacaoEletrica: "concessionaria_cobre",
+  // padrão segue a tipologia (loteamento_aberto = não murado); ambos
+  // ficam disponíveis para override manual
+  murado: false,
+  tipoMuro: "tijolo",
   // vazios = valor vigente da Configuração (hoje 5% e 6%)
   contingenciaPercentual: "",
   custoFinanceiroPercentual: "",
@@ -300,12 +308,15 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
         padraoPavimentacao: data.padraoPavimentacao,
         solucaoEsgoto: data.solucaoEsgoto,
         necessitaElevatoria: data.solucaoEsgoto === "rede_publica" ? data.necessitaElevatoria : undefined,
+        responsavelFossa: data.solucaoEsgoto === "fossa" ? data.responsavelFossa : undefined,
         solucaoAgua: data.solucaoAgua,
         isChacara: data.tipologia === "condominio_chacaras" ? data.isChacara : undefined,
         areaSupressaoVegetalM2: data.areaSupressaoVegetalM2 ? Number(data.areaSupressaoVegetalM2) : undefined,
         arvoresIsoladasUn: data.arvoresIsoladasUn ? Number(data.arvoresIsoladasUn) : undefined,
         tipologia: data.tipologia,
         participacaoEletrica: data.participacaoEletrica,
+        murado: data.murado,
+        tipoMuro: data.murado ? data.tipoMuro : undefined,
         contingenciaPercentual: data.contingenciaPercentual ? Number(data.contingenciaPercentual) : undefined,
         custoFinanceiroPercentual: data.custoFinanceiroPercentual ? Number(data.custoFinanceiroPercentual) : undefined,
         custoAprovacoesTotal: data.capexAprovacoesTotal ? Number(data.capexAprovacoesTotal) : undefined,
@@ -498,7 +509,16 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="tipologia">Tipologia *</Label>
-                <Select value={data.tipologia} onValueChange={(value) => updateData("tipologia", value as WizardData["tipologia"])}>
+                <Select
+                  value={data.tipologia}
+                  onValueChange={(value) => {
+                    const tipologia = value as WizardData["tipologia"];
+                    updateData("tipologia", tipologia);
+                    // padrão sugerido ao trocar de tipologia — usuário ainda pode
+                    // sobrescrever no campo "Murado?" logo abaixo
+                    updateData("murado", tipologia === "condominio_fechado");
+                  }}
+                >
                   <SelectTrigger id="tipologia" className="mt-2">
                     <SelectValue />
                   </SelectTrigger>
@@ -509,7 +529,7 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
                     <SelectItem value="condominio_chacaras">Condomínio de Chácaras</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground mt-1">Define preço/absorção padrão e se muro/portaria/lazer entram no orçamento</p>
+                <p className="text-xs text-muted-foreground mt-1">Define preço/absorção padrão e se portaria/lazer entram no orçamento</p>
               </div>
               <div>
                 <Label htmlFor="topografia">Topografia *</Label>
@@ -552,6 +572,36 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
 
             <div className="pt-2 border-t border-border/40 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
+                <Label htmlFor="murado">Murado? *</Label>
+                <Select value={data.murado ? "sim" : "nao"} onValueChange={(value) => updateData("murado", value === "sim")}>
+                  <SelectTrigger id="murado" className="mt-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sim">Sim</SelectItem>
+                    <SelectItem value="nao">Não</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">Independente da tipologia — um loteamento aberto também pode ser murado</p>
+              </div>
+              {data.murado && (
+                <div>
+                  <Label htmlFor="tipoMuro">Tipo de Muro *</Label>
+                  <Select value={data.tipoMuro} onValueChange={(value) => updateData("tipoMuro", value as WizardData["tipoMuro"])}>
+                    <SelectTrigger id="tipoMuro" className="mt-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="tijolo">Tijolo/Bloco</SelectItem>
+                      <SelectItem value="cerca_metalica">Cerca Metálica</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-border/40 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
                 <Label htmlFor="solucaoAgua">Solução de Água *</Label>
                 <Select value={data.solucaoAgua} onValueChange={(value) => updateData("solucaoAgua", value as WizardData["solucaoAgua"])}>
                   <SelectTrigger id="solucaoAgua" className="mt-2">
@@ -586,6 +636,20 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
                 <div className="flex items-center gap-3 mt-2 md:mt-8">
                   <Switch checked={data.necessitaElevatoria} onCheckedChange={(v) => updateData("necessitaElevatoria", v)} id="necessitaElevatoria" />
                   <Label htmlFor="necessitaElevatoria" className="font-normal">Necessita estação elevatória</Label>
+                </div>
+              )}
+              {data.solucaoEsgoto === "fossa" && (
+                <div>
+                  <Label htmlFor="responsavelFossa">Quem construirá a fossa? *</Label>
+                  <Select value={data.responsavelFossa} onValueChange={(value) => updateData("responsavelFossa", value as WizardData["responsavelFossa"])}>
+                    <SelectTrigger id="responsavelFossa" className="mt-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="incorporadora">Incorporadora (entra no orçamento)</SelectItem>
+                      <SelectItem value="proprietario_lote">Proprietário do lote (custo zerado para a incorporadora)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
             </div>

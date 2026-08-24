@@ -13,9 +13,11 @@ import { calcularAguaEnergia, type AguaEnergiaOutput } from "./aguaEnergiaEngine
 export type Topografia = "plana" | "ondulada" | "acidentada";
 export type PadraoPavimentacao = "asfalto" | "paver";
 export type SolucaoEsgoto = "fossa" | "rede_publica" | "ete_propria";
+export type ResponsavelFossa = "incorporadora" | "proprietario_lote";
 export type SolucaoAgua = "poco" | "rede_publica";
 export type ParticipacaoEletrica = "cliente_paga" | "concessionaria_cobre";
 export type TipologiaCost = "loteamento_popular" | "loteamento_aberto" | "condominio_fechado" | "condominio_chacaras";
+export type TipoMuro = "tijolo" | "cerca_metalica";
 
 /** Multiplicador de volume de corte/aterro por topografia (m³/m²) — regra 11, seção 6. */
 export const MULTIPLICADOR_TERRAPLENAGEM: Record<Topografia, number> = {
@@ -40,12 +42,30 @@ export interface CostEngineInput {
   padraoPavimentacao: PadraoPavimentacao;
   solucaoEsgoto: SolucaoEsgoto;
   necessitaElevatoria?: boolean; // só relevante se solucaoEsgoto = rede_publica
+  /**
+   * Quem constrói a fossa quando solucaoEsgoto = "fossa" (ou quando a baixa
+   * densidade força fossa). Padrão: "incorporadora" (mantém comportamento
+   * anterior). "proprietario_lote" — comum em loteamentos abertos, onde o
+   * futuro dono do lote executa a fossa por conta própria — zera o custo
+   * para a incorporadora (visto no orçamento real MV: "execução pelo
+   * proprietário de cada lote").
+   */
+  responsavelFossa?: ResponsavelFossa;
   solucaoAgua: SolucaoAgua;
   isChacara?: boolean; // condomínio de chácaras + poço → também zera ligação domiciliar
   areaSupressaoVegetalM2?: number;
   arvoresIsoladasUn?: number;
   tipologia: TipologiaCost;
   participacaoEletrica: ParticipacaoEletrica;
+
+  /**
+   * Se o empreendimento é murado. Padrão (se omitido): true quando
+   * tipologia = "condominio_fechado", false caso contrário — mas pode ser
+   * definido explicitamente (ex.: loteamento aberto que muralha o perímetro).
+   */
+  murado?: boolean;
+  /** Material do muro, só relevante quando murado = true. Padrão: "tijolo". */
+  tipoMuro?: TipoMuro;
 
   // Parâmetros técnicos de rede (módulo 2.1)
   larguraMediaViaM?: number; // padrão: 12m
@@ -326,6 +346,8 @@ export function calcularCostEngine(input: CostEngineInput, custos: UnitCostTable
   const esgotoFossa = esgotoEfetivo === "fossa";
   const esgotoRedePublica = esgotoEfetivo === "rede_publica";
   const esgotoETE = esgotoEfetivo === "ete_propria";
+  const responsavelFossa = input.responsavelFossa ?? "incorporadora";
+  const fossaPagaPelaIncorporadora = esgotoFossa && responsavelFossa === "incorporadora";
   const elevatoriaAtiva = esgotoRedePublica && input.necessitaElevatoria === true;
   itens.push(
     item(
@@ -365,12 +387,14 @@ export function calcularCostEngine(input: CostEngineInput, custos: UnitCostTable
       input.numeroLotes,
       "un",
       custos,
-      esgotoFossa,
-      esgotoFossa
-        ? input.dispensaRedeColetora && input.solucaoEsgoto !== "fossa"
-          ? "Baixa densidade forçou fossa mesmo com Rede Pública selecionada"
-          : "Solução por fossa selecionada"
-        : `Solução: ${esgotoEfetivo}`
+      fossaPagaPelaIncorporadora,
+      !esgotoFossa
+        ? `Solução: ${esgotoEfetivo}`
+        : responsavelFossa === "proprietario_lote"
+          ? "Solução por fossa selecionada, mas responsável = proprietário do lote — custo zerado para a incorporadora"
+          : input.dispensaRedeColetora && input.solucaoEsgoto !== "fossa"
+            ? "Baixa densidade forçou fossa mesmo com Rede Pública selecionada"
+            : "Solução por fossa selecionada"
     ),
     item(
       "emissario",
@@ -453,16 +477,22 @@ export function calcularCostEngine(input: CostEngineInput, custos: UnitCostTable
   // GRUPO 7 — Obras Civis (Condomínio Fechado)
   // =========================================================================
   const isCondominioFechado = input.tipologia === "condominio_fechado";
+  // Murado é independente da tipologia por padrão só herda de isCondominioFechado
+  // quando não informado explicitamente — um loteamento aberto também pode
+  // muralhar o perímetro (visto no orçamento real MV, opção cerca metálica).
+  const murado = input.murado ?? isCondominioFechado;
+  const tipoMuro: TipoMuro = input.tipoMuro ?? "tijolo";
+  const itemCodigoMuro = tipoMuro === "cerca_metalica" ? "muro_cerca_metalica" : "muro_condominio";
   itens.push(
     item(
-      "muro_condominio",
+      itemCodigoMuro,
       "obras_civis_condominio",
-      "Muro de fechamento",
+      tipoMuro === "cerca_metalica" ? "Muro de fechamento (cerca metálica)" : "Muro de fechamento (bloco/tijolo)",
       input.perimetroGlebaM,
       "m",
       custos,
-      isCondominioFechado,
-      isCondominioFechado ? "Tipologia = Condomínio Fechado" : "Tipologia ≠ Condomínio Fechado — zerado"
+      murado,
+      murado ? `Murado = Sim (${tipoMuro === "cerca_metalica" ? "cerca metálica" : "tijolo"})` : "Murado = Não — zerado"
     ),
     item(
       "portaria",

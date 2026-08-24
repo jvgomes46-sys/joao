@@ -102,6 +102,36 @@ describe("CostEngine — lógica condicional (spec seção 6)", () => {
     expect(findItem(result.itens, "fossa_sumidouro").ativo).toBe(false);
   });
 
+  it("responsavelFossa = proprietario_lote zera o custo da fossa para a incorporadora, sem afetar as demais regras de fossa", () => {
+    const semResponsavelInformado = calcularCostEngine({ ...baseInput, solucaoEsgoto: "fossa" }, custos, paramsBase);
+    expect(findItem(semResponsavelInformado.itens, "fossa_sumidouro").ativo).toBe(true);
+    expect(findItem(semResponsavelInformado.itens, "fossa_sumidouro").total).toBe(baseInput.numeroLotes);
+
+    const incorporadoraExplicito = calcularCostEngine(
+      { ...baseInput, solucaoEsgoto: "fossa", responsavelFossa: "incorporadora" },
+      custos,
+      paramsBase
+    );
+    expect(findItem(incorporadoraExplicito.itens, "fossa_sumidouro").ativo).toBe(true);
+
+    const proprietario = calcularCostEngine(
+      { ...baseInput, solucaoEsgoto: "fossa", responsavelFossa: "proprietario_lote" },
+      custos,
+      paramsBase
+    );
+    expect(findItem(proprietario.itens, "fossa_sumidouro").ativo).toBe(false);
+    expect(findItem(proprietario.itens, "fossa_sumidouro").total).toBe(0);
+
+    // não interfere na solução de rede pública/ETE, que não olham responsavelFossa
+    const redePublica = calcularCostEngine(
+      { ...baseInput, solucaoEsgoto: "rede_publica", responsavelFossa: "proprietario_lote" },
+      custos,
+      paramsBase
+    );
+    expect(findItem(redePublica.itens, "fossa_sumidouro").ativo).toBe(false);
+    expect(findItem(redePublica.itens, "rede_coletora_esgoto").ativo).toBe(true);
+  });
+
   it("regra 7: tipologia ≠ Condomínio Fechado zera muro, portaria e clube", () => {
     const aberto = calcularCostEngine({ ...baseInput, tipologia: "loteamento_aberto" }, custos, paramsBase);
     expect(findItem(aberto.itens, "muro_condominio").ativo).toBe(false);
@@ -115,6 +145,28 @@ describe("CostEngine — lógica condicional (spec seção 6)", () => {
 
     const chacaras = calcularCostEngine({ ...baseInput, tipologia: "condominio_chacaras" }, custos, paramsBase);
     expect(findItem(chacaras.itens, "muro_condominio").ativo).toBe(false);
+  });
+
+  it("murado: pode ser definido explicitamente independente da tipologia, e escolhe o item pelo tipo de muro", () => {
+    const abertoMuradoTijolo = calcularCostEngine({ ...baseInput, tipologia: "loteamento_aberto", murado: true }, custos, paramsBase);
+    expect(findItem(abertoMuradoTijolo.itens, "muro_condominio").ativo).toBe(true);
+    expect(abertoMuradoTijolo.itens.some((i) => i.itemCodigo === "muro_cerca_metalica")).toBe(false);
+
+    const abertoMuradoMetalico = calcularCostEngine(
+      { ...baseInput, tipologia: "loteamento_aberto", murado: true, tipoMuro: "cerca_metalica" },
+      custos,
+      paramsBase
+    );
+    expect(findItem(abertoMuradoMetalico.itens, "muro_cerca_metalica").ativo).toBe(true);
+    expect(abertoMuradoMetalico.itens.some((i) => i.itemCodigo === "muro_condominio")).toBe(false);
+    expect(findItem(abertoMuradoMetalico.itens, "muro_cerca_metalica").total).toBe(
+      baseInput.perimetroGlebaM * custos["muro_cerca_metalica"]
+    );
+
+    const fechadoNaoMurado = calcularCostEngine({ ...baseInput, tipologia: "condominio_fechado", murado: false }, custos, paramsBase);
+    expect(findItem(fechadoNaoMurado.itens, "muro_condominio").ativo).toBe(false);
+    // portaria e área de lazer continuam ligadas à tipologia, não ao muro
+    expect(findItem(fechadoNaoMurado.itens, "portaria").ativo).toBe(true);
   });
 
   it("regra 8: supressão vegetal > 0 ativa custo de supressão no orçamento", () => {
