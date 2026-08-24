@@ -728,23 +728,23 @@ export function StudyWizard({ open, onOpenChange, onSuccess }: StudyWizardProps)
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="comissaoPercentual">Comissão</Label>
-                  <Input id="comissaoPercentual" type="number" value={data.comissaoPercentual} onChange={(e) => updateData("comissaoPercentual", e.target.value)} className="mt-2" />
+                  <Input id="comissaoPercentual" type="number" placeholder="Conforme Configuração" value={data.comissaoPercentual} onChange={(e) => updateData("comissaoPercentual", e.target.value)} className="mt-2" />
                 </div>
                 <div>
                   <Label htmlFor="marketingPercentual">Marketing</Label>
-                  <Input id="marketingPercentual" type="number" value={data.marketingPercentual} onChange={(e) => updateData("marketingPercentual", e.target.value)} className="mt-2" />
+                  <Input id="marketingPercentual" type="number" placeholder="Conforme Configuração" value={data.marketingPercentual} onChange={(e) => updateData("marketingPercentual", e.target.value)} className="mt-2" />
                 </div>
                 <div>
                   <Label htmlFor="impostosPercentual">Impostos</Label>
-                  <Input id="impostosPercentual" type="number" value={data.impostosPercentual} onChange={(e) => updateData("impostosPercentual", e.target.value)} className="mt-2" />
+                  <Input id="impostosPercentual" type="number" placeholder="Conforme Configuração" value={data.impostosPercentual} onChange={(e) => updateData("impostosPercentual", e.target.value)} className="mt-2" />
                 </div>
                 <div>
                   <Label htmlFor="inadimplenciaPercentual">Inadimplência</Label>
-                  <Input id="inadimplenciaPercentual" type="number" value={data.inadimplenciaPercentual} onChange={(e) => updateData("inadimplenciaPercentual", e.target.value)} className="mt-2" />
+                  <Input id="inadimplenciaPercentual" type="number" placeholder="Conforme Configuração" value={data.inadimplenciaPercentual} onChange={(e) => updateData("inadimplenciaPercentual", e.target.value)} className="mt-2" />
                 </div>
                 <div>
                   <Label htmlFor="despesasAdministrativasPercentual">Despesas Adm.</Label>
-                  <Input id="despesasAdministrativasPercentual" type="number" value={data.despesasAdministrativasPercentual} onChange={(e) => updateData("despesasAdministrativasPercentual", e.target.value)} className="mt-2" />
+                  <Input id="despesasAdministrativasPercentual" type="number" placeholder="Conforme Configuração" value={data.despesasAdministrativasPercentual} onChange={(e) => updateData("despesasAdministrativasPercentual", e.target.value)} className="mt-2" />
                 </div>
               </div>
             </div>
