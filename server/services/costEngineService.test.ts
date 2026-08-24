@@ -85,6 +85,42 @@ describe("CostEngineService — integração com GeoEngine e Módulo de Configur
     expect(snapshotData.custosUnitarios["limpeza_destocamento"]).toBeGreaterThan(0);
   });
 
+  it("murado: quando omitido, segue o padrão da Configuração para a tipologia (config_typology_matrix.temMuro)", async () => {
+    await runGeoEngine(projectId, userId, { areaBruta: 100_000, modoLotes: "automatico", areaMediaLoteAlvo: 300 });
+
+    const aberto = await runCostEngine(projectId, userId, {
+      topografia: "plana",
+      padraoPavimentacao: "asfalto",
+      solucaoEsgoto: "rede_publica",
+      solucaoAgua: "rede_publica",
+      tipologia: "loteamento_aberto", // temMuro: false no seed
+      participacaoEletrica: "concessionaria_cobre",
+    });
+    expect(aberto.itens.find((i) => i.itemCodigo === "muro_condominio")?.ativo).toBe(false);
+
+    const fechado = await runCostEngine(projectId, userId, {
+      topografia: "plana",
+      padraoPavimentacao: "asfalto",
+      solucaoEsgoto: "rede_publica",
+      solucaoAgua: "rede_publica",
+      tipologia: "condominio_fechado", // temMuro: true no seed
+      participacaoEletrica: "concessionaria_cobre",
+    });
+    expect(fechado.itens.find((i) => i.itemCodigo === "muro_condominio")?.ativo).toBe(true);
+
+    // override explícito sempre vence, em qualquer direção
+    const fechadoSemMuro = await runCostEngine(projectId, userId, {
+      topografia: "plana",
+      padraoPavimentacao: "asfalto",
+      solucaoEsgoto: "rede_publica",
+      solucaoAgua: "rede_publica",
+      tipologia: "condominio_fechado",
+      participacaoEletrica: "concessionaria_cobre",
+      murado: false,
+    });
+    expect(fechadoSemMuro.itens.find((i) => i.itemCodigo === "muro_condominio")?.ativo).toBe(false);
+  });
+
   it("calcula o custo de aprovações sozinho (módulo 2.5) — sem nada digitado à mão", async () => {
     await runGeoEngine(projectId, userId, { areaBruta: 100_000, modoLotes: "automatico", areaMediaLoteAlvo: 300 });
 

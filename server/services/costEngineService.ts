@@ -1,4 +1,4 @@
-import { getMergedUnitCosts, getCostParameter, getCostParameters, createConfigSnapshot, extrairUfDaLocalizacao } from "../config";
+import { getMergedUnitCosts, getCostParameter, getCostParameters, createConfigSnapshot, extrairUfDaLocalizacao, getTypologyMatrixEntry } from "../config";
 import { getGeoEngineDataByProjectId, getProjectById, upsertCostEngineData } from "../db";
 import { calcularCostEngine, CostEngineInput, CostEngineOutput, UnitCostTable } from "../engines/costEngine";
 import { calcularCustoAprovacoes, type ApprovalCostIndices, type ApprovalCostOutput } from "../engines/approvalCostEngine";
@@ -120,6 +120,13 @@ export async function runCostEngine(
   const areaParcelavel = Number(geo.areaLiquida ?? geo.areaBruta);
   const areaCalcadasM2 = ((indicesUrbanisticos?.percentualCalcadas ?? 0) / 100) * areaParcelavel;
 
+  // Murado: se não informado explicitamente, segue o padrão da Configuração
+  // para a tipologia (config_typology_matrix.temMuro) — nunca hardcoded no
+  // motor. A matriz hoje só tem linhas em região "Nacional" (mesma escolha
+  // já feita pelo SalesEngine para este mesmo lookup).
+  const muradoEfetivo =
+    technicalInput.murado ?? (await getTypologyMatrixEntry(technicalInput.tipologia, "Nacional")).temMuro;
+
   const costInput: CostEngineInput = {
     ...technicalInput,
     areaBruta: Number(geo.areaBruta),
@@ -130,6 +137,7 @@ export async function runCostEngine(
     perimetroGlebaM: technicalInput.perimetroGlebaM ?? estimarPerimetroQuadrado(Number(geo.areaBruta)),
     densidadeHabHa: Number(geo.densidade),
     dispensaRedeColetora: Number(geo.densidade) < 20,
+    murado: muradoEfetivo,
   };
 
   // Módulo 2.5 — custo de aprovações calculado automaticamente a partir da
@@ -196,7 +204,7 @@ export async function runCostEngine(
       areaSupressaoVegetalM2: costInput.areaSupressaoVegetalM2 ?? 0,
       arvoresIsoladasUn: costInput.arvoresIsoladasUn ?? 0,
       isChacara: costInput.isChacara ?? false,
-      murado: costInput.murado ?? costInput.tipologia === "condominio_fechado",
+      murado: costInput.murado,
       tipoMuro: costInput.tipoMuro ?? "tijolo",
     },
   });
