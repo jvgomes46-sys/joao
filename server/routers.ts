@@ -732,9 +732,11 @@ export const appRouter = router({
   }),
 
   portfolio: router({
-    get: protectedProcedure.query(async ({ ctx }) => {
+    get: protectedProcedure
+      .input(z.object({ projectIds: z.array(z.number()).optional() }).optional())
+      .query(async ({ ctx, input }) => {
       try {
-        return await getPortfolioData(ctx.user.id);
+        return await getPortfolioData(ctx.user.id, input?.projectIds);
       } catch (error) {
         throw new TRPCError({
           code: "BAD_REQUEST",

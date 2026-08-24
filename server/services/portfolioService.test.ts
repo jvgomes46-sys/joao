@@ -73,6 +73,37 @@ describe("PortfolioService — consolidação multiprojeto (spec seção 8, item
     expect(out.fluxoConsolidado.length).toBeGreaterThan(120); // 120 do A + 12 de offset do B
   });
 
+  it("seleção explícita consolida só os escolhidos, mas lista os demais desmarcados", async () => {
+    const todos = await getPortfolioData(userId);
+    const primeiro = todos.projetos[0];
+
+    const so1 = await getPortfolioData(userId, [primeiro.projectId]);
+    expect(so1.numeroProjetos).toBe(1);
+    expect(so1.vgvTotal).toBeCloseTo(primeiro.vgv, 2);
+
+    // o outro continua visível na lista, porém desmarcado — dá para trazê-lo
+    // de volta sem sair da tela
+    expect(so1.projetos).toHaveLength(2);
+    expect(so1.projetos.filter((p) => p.selecionado)).toHaveLength(1);
+    expect(so1.projetos.filter((p) => !p.selecionado)).toHaveLength(1);
+  });
+
+  it("seleção vazia diz 'nenhum selecionado', não 'nenhum calculado'", async () => {
+    const out = await getPortfolioData(userId, []);
+    expect(out.numeroProjetos).toBe(0);
+    expect(out.tirIndisponivelMotivo).toBe("Nenhum projeto selecionado");
+    expect(out.alertas.some((a) => /Nenhum projeto selecionado/.test(a))).toBe(true);
+    // os projetos continuam listados para poder remarcar
+    expect(out.projetos.length).toBeGreaterThan(0);
+  });
+
+  it("tirar um projeto do portfólio reduz o capital necessário no pico", async () => {
+    const todos = await getPortfolioData(userId);
+    const so1 = await getPortfolioData(userId, [todos.projetos[0].projectId]);
+    // menos projetos => exposição consolidada menos negativa (ou igual)
+    expect(so1.exposicaoMaximaConsolidada).toBeGreaterThanOrEqual(todos.exposicaoMaximaConsolidada);
+  });
+
   it("projeto sem FinanceEngine fica fora da consolidação e é reportado, não contado como zero", async () => {
     const semCalculo = await createProject({ userId, name: "So Rascunho", type: "loteamento", location: "x" });
     ids.push(semCalculo!.id);

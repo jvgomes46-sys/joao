@@ -7,6 +7,8 @@ import type { FinanceMonthRow } from "../engines/financeEngine";
 
 export interface PortfolioProjetoResumo {
   projectId: number;
+  /** true quando este projeto entrou na consolidação atual. */
+  selecionado: boolean;
   nome: string;
   localizacao: string | null;
   status: string;
@@ -36,7 +38,7 @@ function diffMeses(de: Date, ate: Date): number {
  * reportados à parte em vez de entrarem como zero — um projeto sem fluxo
  * não é um projeto que não consome caixa.
  */
-export async function getPortfolioData(userId: number): Promise<PortfolioData> {
+export async function getPortfolioData(userId: number, projectIdsSelecionados?: number[]): Promise<PortfolioData> {
   const db = await getDb();
   if (!db) throw new Error("Banco de dados não disponível");
 
@@ -56,12 +58,20 @@ export async function getPortfolioData(userId: number): Promise<PortfolioData> {
   const salesPorProjeto = new Map(sales.map((s) => [s.projectId, s]));
   const costPorProjeto = new Map(costs.map((c) => [c.projectId, c]));
 
-  const comCalculo = todosProjetos.filter((p) => {
+  const temCalculo = (p: (typeof todosProjetos)[number]) => {
     const f = financePorProjeto.get(p.id);
-    return f && f.vpl !== null && f.fluxoCaixaMensal !== null;
-  });
+    return Boolean(f && f.vpl !== null && f.fluxoCaixaMensal !== null);
+  };
+
+  // Seleção: se nenhuma lista for informada, consolida tudo que tem cálculo.
+  // Informada, consolida só o que foi escolhido — mas os disponíveis continuam
+  // sendo listados, para a tela poder oferecer a seleção.
+  const selecionados = projectIdsSelecionados ? new Set(projectIdsSelecionados) : null;
+  const disponiveis = todosProjetos.filter(temCalculo);
+  const comCalculo = selecionados ? disponiveis.filter((p) => selecionados.has(p.id)) : disponiveis;
+
   const projetosSemCalculo = todosProjetos
-    .filter((p) => !comCalculo.some((c) => c.id === p.id))
+    .filter((p) => !temCalculo(p))
     .map((p) => ({ projectId: p.id, nome: p.name }));
 
   // Alinhamento no calendário: quem tem data de início prevista é deslocado
@@ -96,6 +106,7 @@ export async function getPortfolioData(userId: number): Promise<PortfolioData> {
 
     resumos.push({
       projectId: projeto.id,
+      selecionado: true,
       nome: projeto.name,
       localizacao: projeto.location,
       status: projeto.status,
@@ -111,6 +122,14 @@ export async function getPortfolioData(userId: number): Promise<PortfolioData> {
 
   const consolidado = calcularPortfolio(entradas);
 
+  // Desmarcar tudo é diferente de não ter nada calculado — o motor devolve o
+  // mesmo objeto vazio nos dois casos, então o motivo precisa ser corrigido
+  // aqui para não dizer ao usuário que ele não tem estudos.
+  if (entradas.length === 0 && disponiveis.length > 0) {
+    consolidado.tirIndisponivelMotivo = "Nenhum projeto selecionado";
+    consolidado.alertas.push("Nenhum projeto selecionado — marque ao menos um para ver a consolidação.");
+  }
+
   if (projetosSemCalculo.length > 0) {
     consolidado.alertas.push(
       `${projetosSemCalculo.length} projeto(s) fora da consolidação por ainda não terem o FinanceEngine calculado: ` +
@@ -118,5 +137,31 @@ export async function getPortfolioData(userId: number): Promise<PortfolioData> {
     );
   }
 
-  return { ...consolidado, projetos: resumos.sort((a, b) => b.vgv - a.vgv), projetosSemCalculo };
+  // Projetos calculáveis que ficaram fora da seleção também aparecem na lista
+  // (desmarcados), para o usuário poder trazê-los de volta sem sair da tela.
+  const foraDaSelecao: PortfolioProjetoResumo[] = disponiveis
+    .filter((p) => !comCalculo.some((c) => c.id === p.id))
+    .map((p) => {
+      const finance = financePorProjeto.get(p.id)!;
+      return {
+        projectId: p.id,
+        selecionado: false,
+        nome: p.name,
+        localizacao: p.location,
+        status: p.status,
+        dataInicioPrevista: p.dataInicioPrevista,
+        offsetMeses: 0,
+        vgv: Number(salesPorProjeto.get(p.id)?.vgv ?? 0),
+        capexTotal: Number(costPorProjeto.get(p.id)?.investimentoTotal ?? 0),
+        vpl: Number(finance.vpl),
+        tirAnual: finance.tir !== null ? Number(finance.tir) : null,
+        exposicaoIndividual: Number(finance.exposicaoMaximaCaixa ?? 0),
+      };
+    });
+
+  return {
+    ...consolidado,
+    projetos: [...resumos, ...foraDaSelecao].sort((a, b) => Number(b.selecionado) - Number(a.selecionado) || b.vgv - a.vgv),
+    projetosSemCalculo,
+  };
 }

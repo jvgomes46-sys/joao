@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -5,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { AlertTriangle, Layers, TrendingUp, Wallet, PiggyBank, Percent, Eye } from "lucide-react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis, ReferenceDot } from "recharts";
@@ -43,7 +45,23 @@ function KpiCard({
 }
 
 export default function Portfolio() {
-  const { data, isLoading, error } = trpc.portfolio.get.useQuery(undefined, { retry: false });
+  // null = ainda não mexeu na seleção (consolida tudo). Depois vira a lista
+  // explícita de ids escolhidos.
+  const [selecao, setSelecao] = useState<number[] | null>(null);
+  const { data, isLoading, error } = trpc.portfolio.get.useQuery(
+    selecao === null ? {} : { projectIds: selecao },
+    { retry: false }
+  );
+
+  const idsSelecionados = useMemo(
+    () => selecao ?? (data?.projetos ?? []).filter((p) => p.selecionado).map((p) => p.projectId),
+    [selecao, data]
+  );
+
+  const alternar = (projectId: number, marcado: boolean) => {
+    const base = idsSelecionados;
+    setSelecao(marcado ? Array.from(new Set([...base, projectId])) : base.filter((id) => id !== projectId));
+  };
 
   if (isLoading) {
     return (
@@ -100,7 +118,7 @@ export default function Portfolio() {
       <div>
         <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Portfólio</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          {data.numeroProjetos} estudo(s) consolidado(s) — capital, retorno e cronograma somados entre projetos
+          {data.numeroProjetos} de {data.projetos.length} estudo(s) na consolidação — capital, retorno e cronograma somados
         </p>
       </div>
 
@@ -179,13 +197,34 @@ export default function Portfolio() {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Projetos no Portfólio</CardTitle>
-          <CardDescription>Ordenados por VGV</CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-2">
+          <div>
+            <CardTitle>Projetos no Portfólio</CardTitle>
+            <CardDescription>
+              Marque quais entram na consolidação — os números acima recalculam para a seleção
+            </CardDescription>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <Button variant="outline" size="sm" onClick={() => setSelecao(data.projetos.map((p) => p.projectId))}>
+              Todos
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setSelecao([])}>
+              Nenhum
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-2">
           {data.projetos.map((p) => (
-            <div key={p.projectId} className="flex items-center justify-between gap-3 py-2 border-b last:border-0">
+            <div
+              key={p.projectId}
+              className={`flex items-center justify-between gap-3 py-2 border-b last:border-0 ${p.selecionado ? "" : "opacity-50"}`}
+            >
+              <Checkbox
+                checked={p.selecionado}
+                onCheckedChange={(v) => alternar(p.projectId, v === true)}
+                aria-label={`Incluir ${p.nome} no portfólio`}
+                className="shrink-0"
+              />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium truncate">{p.nome}</p>
                 <p className="text-xs text-muted-foreground">
